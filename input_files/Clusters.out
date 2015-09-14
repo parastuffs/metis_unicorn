@@ -1,0 +1,11 @@
+openMSP430_dbg_0
+openMSP430_multiplier_0
+openMSP430_watchdog_0
+openMSP430_sfr_0
+openMSP430_mem_backbone_0
+openMSP430_execution_unit_0_alu_0
+openMSP430_frontend_0
+openMSP430_clock_module_0
+openMSP430__GlueLogic__
+openMSP430_execution_unit_0_register_file_0
+openMSP430_execution_unit_0__GlueLogic__
