@@ -9,7 +9,7 @@ import copy
 
 global METIS_PATH
 METIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
-EDGE_WEIGHTS_TYPES = 5
+EDGE_WEIGHTS_TYPES = 6
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 
@@ -33,6 +33,9 @@ class Graph():
                                         # Each element of those sublists refer to one weight type.
         self.hyperedgeWeightsMax = []   # Maximum weight for each weight type.
                                         # Ordered by weight type.
+        self.hyperedgesWL = []  # Each element is a list of the wire length of each net
+                                # in the hyperedge at the same index as the list (meaning
+                                # hyperedgesWL[0] is for the hyperedge 0.
         self.Vertices        = []
         self.name            = []    
         self.srcCluster      = []    
@@ -337,7 +340,7 @@ class Graph():
                     # 1 / (wire length and number of wires)
                     self.hyperedgeWeights[i][weightType] = 1.0 / ( \
                         WEIGHT_COMBILI_COEF * self.hyperedgeWeights[i][0] + \
-                        (1 - WEIGHT_COMBILI_COEF) * self.hyperedgeWeights[i][1]
+                        (1 - WEIGHT_COMBILI_COEF) * self.hyperedgeWeights[i][1] )
                 # Save the max
                 if self.hyperedgeWeights[i][weightType] > self.hyperedgeWeightsMax[weightType]:
                     self.hyperedgeWeightsMax[weightType] = self.hyperedgeWeights[i][weightType]
@@ -366,6 +369,14 @@ class Graph():
         for i, cluster in enumerate(self.ClusterData):
             self.clusterWeights.append(cluster[5])
 
+
+
+    def computeHyperedgeStat(self):
+        print "Generating statistics on the hyperedges."
+        for i, hyperedge in enumerate(self.hyperedges)
+            self.hyperedgesWL.append(list())
+            for net in hyperedge:
+                self.hyperedgesWL[i].append(self.netWL[net])
 
 
 
@@ -649,7 +660,6 @@ if __name__ == "__main__":
         clustersInstancesFile = mydir + "ClustersInstances.out"
         netsInstances = mydir + "InstancesPerNet.out"
         netsWL = mydir + "WLnets.out"
-        metisInput = "input.hgr"
         # connect_file = mydir + "connectivity.rpt"
         graph.ReadClusters(clustersAreaFile, 14, 2)
         graph.readClustersInstances(clustersInstancesFile, 0, 0)
@@ -663,23 +673,35 @@ if __name__ == "__main__":
         graph.computeVertexWeights()
 
         for edgeWeightType in xrange(0, EDGE_WEIGHTS_TYPES):
+            metisInput = "input"
             for vertexWeightType in xrange(0, VERTEX_WEIGHTS_TYPES):
                 print "================================================="
                 if edgeWeightType == 0:
                     print "> Edge weight: # wires"
+                    metisInput += "_wires"
                 elif edgeWeightType == 1:
                     print "> Edge weight: wire length"
+                    metisInput += "_wire-length"
                 elif edgeWeightType == 2:
                     print "> Edge weight: 1 / # wires"
+                    metisInput += "_1-over-wires"
                 elif edgeWeightType == 3:
                     print "> Edge weight: 1 / wire length"
+                    metisInput += "_1-over-wire-length"
                 elif edgeWeightType == 4:
                     print "> Edge weight: " + str(WEIGHT_COMBILI_COEF) + " * # wires + " + \
                         str(1 - WEIGHT_COMBILI_COEF) + " * wire length"
+                    metisInput += "_wires-wire-length"
+                elif edgeWeightType == 5:
+                    print "> Edge weight: 1 / " + str(WEIGHT_COMBILI_COEF) + " * # wires + " + \
+                        str(1 - WEIGHT_COMBILI_COEF) + " * wire length"
+                    metisInput += "_1-over-wires-wire-length"
 
                 if vertexWeightType == 0:
                     print "> Vertex weight: cluster area"
+                    metisInput += "_area"
                 print "================================================="
+                metisInput += ".hgr"
                 graph.generateMetisInput(metisInput, edgeWeightType)
                 graph.GraphPartition(metisInput)
 
