@@ -9,8 +9,9 @@ import copy
 
 global METIS_PATH
 METIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
-EDGE_WEIGHTS_TYPES = 2
+EDGE_WEIGHTS_TYPES = 5
 VERTEX_WEIGHTS_TYPES = 1
+WEIGHT_COMBILI_COEF = 0.5
 
 class Graph():
     def __init__(self):
@@ -314,14 +315,34 @@ class Graph():
             self.hyperedgeWeights[i] = [0] * EDGE_WEIGHTS_TYPES
             for weightType in xrange(0, EDGE_WEIGHTS_TYPES):
                 if weightType == 0:
+                    # Number of wires
                     for net in hyperedge[0]:
                         self.hyperedgeWeights[i][weightType] += self.netPins[net]
                 elif weightType == 1:
+                    # Wire length
                     for net in hyperedge[0]:
                         self.hyperedgeWeights[i][weightType] += self.netWL[net]
+                elif weightType == 2:
+                    # 1/#wires
+                    self.hyperedgeWeights[i][weightType] = 1.0 / self.hyperedgeWeights[i][0]
+                elif weightType == 3:
+                    # 1/Wire length
+                    self.hyperedgeWeights[i][weightType] = 1.0 / self.hyperedgeWeights[i][1]
+                elif weightType == 4:
+                    # wire length and number of wires
+                    self.hyperedgeWeights[i][weightType] = \
+                        WEIGHT_COMBILI_COEF * self.hyperedgeWeights[i][0] + \
+                        (1 - WEIGHT_COMBILI_COEF) * self.hyperedgeWeights[i][1]
+                elif weightType == 5:
+                    # 1 / (wire length and number of wires)
+                    self.hyperedgeWeights[i][weightType] = 1.0 / ( \
+                        WEIGHT_COMBILI_COEF * self.hyperedgeWeights[i][0] + \
+                        (1 - WEIGHT_COMBILI_COEF) * self.hyperedgeWeights[i][1]
                 # Save the max
                 if self.hyperedgeWeights[i][weightType] > self.hyperedgeWeightsMax[weightType]:
                     self.hyperedgeWeightsMax[weightType] = self.hyperedgeWeights[i][weightType]
+
+        print self.hyperedgeWeights
 
         # Normalization
         if normalized:
@@ -335,7 +356,8 @@ class Graph():
                 for j in xrange(0, EDGE_WEIGHTS_TYPES):
                     # There is no need to normalize the weights from which we chose the maximum weight (obviously)
                     if maxWeight != self.hyperedgeWeightsMax[j]:
-                        self.hyperedgeWeights[i][j] = (self.hyperedgeWeights[i][j] * maxWeight) / self.hyperedgeWeightsMax[j]
+                        self.hyperedgeWeights[i][j] = int((self.hyperedgeWeights[i][j] * maxWeight) / self.hyperedgeWeightsMax[j])
+        print self.hyperedgeWeights
 
 
 
@@ -642,15 +664,22 @@ if __name__ == "__main__":
 
         for edgeWeightType in xrange(0, EDGE_WEIGHTS_TYPES):
             for vertexWeightType in xrange(0, VERTEX_WEIGHTS_TYPES):
-                print "============================================"
+                print "================================================="
                 if edgeWeightType == 0:
                     print "> Edge weight: # wires"
                 elif edgeWeightType == 1:
                     print "> Edge weight: wire length"
+                elif edgeWeightType == 2:
+                    print "> Edge weight: 1 / # wires"
+                elif edgeWeightType == 3:
+                    print "> Edge weight: 1 / wire length"
+                elif edgeWeightType == 4:
+                    print "> Edge weight: " + str(WEIGHT_COMBILI_COEF) + " * # wires + " + \
+                        str(1 - WEIGHT_COMBILI_COEF) + " * wire length"
 
                 if vertexWeightType == 0:
                     print "> Vertex weight: cluster area"
-                print "============================================"
+                print "================================================="
                 graph.generateMetisInput(metisInput, edgeWeightType)
                 graph.GraphPartition(metisInput)
 
