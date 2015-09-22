@@ -1,7 +1,15 @@
 """
 PHONEY [Pronounce 'poney'], Partitioning of Hypergraph Obviously Not EasY
+
+Want to use it? Then check the 'METIS_PATH' and 'dirs' variables.
 """
 
+"""
+TODO
+> Object Oriented
+> Clean dead code
+> Doc
+"""
 
 import math
 from subprocess import call
@@ -371,12 +379,18 @@ class Graph():
 
 
 
-    def computeHyperedgeStat(self):
-        print "Generating statistics on the hyperedges."
-        for i, hyperedge in enumerate(self.hyperedges)
-            self.hyperedgesWL.append(list())
-            for net in hyperedge:
-                self.hyperedgesWL[i].append(self.netWL[net])
+    # def computeHyperedgeStat(self):
+    #     print "Generating statistics on the hyperedges."
+    #     for i, hyperedge in enumerate(self.hyperedges)
+    #         self.hyperedgesWL.append(list())
+    #         for net in hyperedge:
+    #             self.hyperedgesWL[i].append(self.netWL[net])
+    #     print "Hyperedges statistics:"
+    #     print "Hyperedge \t WL tot \t WL max \t WL avg \t WL std dev"
+    #     for i, hyperedge in enumerate(self.hyperedges):
+    #         print str(i)
+    #         print 
+
 
 
 
@@ -607,26 +621,26 @@ class Graph():
         # call([METIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
         call(command.split())
     
-    def WritePartitionDirectives(self, CostFunction):
-        print "--------------------------------------------------->"
-        print "Write tcl file for cost: ", CostFunction
-        filename ="Partition" + str(CostFunction) + ".tcl"
-        filename2 ="partition" + str(CostFunction) + ".hgr.part.2"
+    def WritePartitionDirectives(self, metisFile):
+        # print "--------------------------------------------------->"
+        print "Write tcl file for file: ", metisFile
+        filenameOut = metisFile + ".tcl"
+        filenameIn = metisFile + ".part.2"
         try:
-            f = open(filename, "w")
-            f2 = open(filename2, "r")
+            fOut = open(filenameOut, "w")
+            fIn = open(filenameIn, "r")
         except IOError as e:
             print "Can't open file"
             return False
-        data = f2.readlines()
-        i=0
-        for vertice in self.Vertices:
-            f.write(str('add_to_die -cluster ' + "\t"+ str(vertice) + "\t -die Die" + str(data[i])))
-            i+=1
-        f.close()
-        f2.close()
+        data = fIn.readlines()
+        for i, cluster in enumerate(self.ClusterData):
+            fOut.write(str('add_to_die -cluster ' + "\t" + str(cluster[0]) + \
+                "\t -die Die" + str(data[i])))
+        fOut.close()
+        fIn.close()
         print "Done!"
-        print "<---------------------------------------------------\n"
+        # print "<---------------------------------------------------\n"
+
 
 #----------------------------------------------------------------
 #----------------------------------------------------------------
@@ -704,6 +718,7 @@ if __name__ == "__main__":
                 metisInput += ".hgr"
                 graph.generateMetisInput(metisInput, edgeWeightType)
                 graph.GraphPartition(metisInput)
+                graph.WritePartitionDirectives(metisInput)
 
         # for i, cluster in enumerate(graph.ClusterName):
         #     str = cluster
