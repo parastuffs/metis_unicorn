@@ -6,12 +6,7 @@ Want to use it? Then check the 'METIS_PATH' and 'dirs' variables.
 
 """
 TODO
-> Clean dead code
 > Doc
-> Reading the second net file takes way to much time.
-We should sort the nets list first, so that we would not have
-to run through it all for each god damn net.
-http://stackoverflow.com/a/403426/3973030
 """
 
 import math
@@ -103,7 +98,6 @@ class Graph():
         return found, clusterID
 
     def ReadClusters(self, filename, hrows, frows):
-        # print "--------------------------------------------------->"
         print (str("Reading clusters file: " + filename))
         with open(filename, 'r') as f:
             lines = f.read().splitlines()
@@ -118,9 +112,6 @@ class Graph():
         for i, line in enumerate(lines):
             line = line.strip(' \n')
             clusterDataRow = line.split()
-            # self.ClusterData.append(clusterDataRow)
-            # self.ClusterName.append(clusterDataRow[0])
-            # vvvvv OO
             cluster = Cluster(clusterDataRow[0], i)
             self.clusters.append(cluster)
 
@@ -132,16 +123,6 @@ class Graph():
             
             self.clusters[i].setArea(float(clusterDataRow[5]))
 
-            # ^^^^^^^^ OO
-
-        # for cluster in self.clusters:
-        #     print cluster.boudndaries
-
-        # self.ClusterRows = len(self.ClusterName)
-        # self.ClusterCols = len(self.ClusterData[0])
-        # print (str("\t Clusters: " + str(self.ClusterRows) + "\t Columns read: " + str(self.ClusterCols) ))
-        # print "Done!"
-        # print "<---------------------------------------------------\n"
 
     def readClustersInstances(self, filename, hrows, frows):
         # print "--------------------------------------------------->"
@@ -167,18 +148,6 @@ class Graph():
             line = line.replace('}','')
             # print line
             clusterInstancesRow = line.split()
-
-            # Add the instances list at the row index corresponding to the cluster ID.
-            # try:
-            #     # Get the ID of the corresponding cluster name.
-            #     clusterID = self.ClusterName.index(clusterInstancesRow[0])
-            # except:
-            #     print "Error: the cluster \"" + clusterInstancesRow[0] + "\" in"+filename+"could not be found in the cluster list."
-            # else:
-            #     del clusterInstancesRow[0]
-            #     self.clusterInstances[clusterID] = clusterInstancesRow
-
-            # vvvvvvvvvv OO => findClusterByName(self, clusterName)
             found, clusterID = self.findClusterByName(clusterInstancesRow[0])
             if found:
                 del clusterInstancesRow[0]
@@ -186,13 +155,9 @@ class Graph():
                     # instance = Instance(instanceName)
                     # self.clusters[clusterID].addInstance(instance)
                     self.clusters[clusterID].addInstance(instanceName)
-            # ^^^^^^^^^^ OO
 
-        # print "Done!"
-        # print "<---------------------------------------------------\n"
 
     def readNetsWireLength(self, filename, hrows, frows):
-        # print "--------------------------------------------------->"
         print (str("Reading wire length nets file: " + filename))
         with open(filename, 'r') as f:
             lines = f.read().splitlines()
@@ -214,32 +179,16 @@ class Graph():
         lines.sort()
 
         for i, line in enumerate(lines):
-            # line = line.strip(' \n')
-            # line = " ".join(line.split()) # Remove all extra whitespace characters.
             netDataRow = line.split()
 
-            # try:
-            #     netID = self.netName.index(netDataRow[0])
-            # except:
-            #     print "Error: the net \"" + netDataRow[0] +"\" in " + filename + \
-            #         " could not be found in the list of net names."
-            # else:
-            #     self.netPins[netID] = int(netDataRow[1])
-            #     self.netWL[netID] = int(float(netDataRow[2]))
-
-            # vvvvvvvvvv OO
             net = Net(netDataRow[0], i)
             net.setPinAmount(int(netDataRow[1]))
             net.setWL(int(float(netDataRow[2])))
             self.nets.append(net)
-            # ^^^^^^^^^^ OO
             printProgression(i, len(lines))
 
-        # print "Done!"
-        # print "<---------------------------------------------------\n"
 
     def readNets(self, filename, hrows, frows):
-        # print "--------------------------------------------------->"
         print (str("Reading nets file: " + filename))
         with open(filename, 'r') as f:
             lines = f.read().splitlines()
@@ -253,9 +202,6 @@ class Graph():
 
         lines.sort()
 
-        # for line in lines:
-        #     print line
-
         # As the nets list is sorted, we should not run through all the
         # self.nets list for each line.
         # For each line, move forward in self.nets. If the net in the line
@@ -263,19 +209,11 @@ class Graph():
         netID = 0
         i = 0
         while i < len(lines) and netID < len(self.nets):
-        # for i,line in enumerate(lines):
             line = lines[i]
             line = line.strip(' \n')
             line = line.replace('{','')
             line = line.replace('}','')
             netDataRow = line.split()
-            # self.netName.append(netDataRow[0])
-            # del netDataRow[0] # Remove the net name from the list
-            #                     # TODO: could also not delete it and simpy
-            #                     # append(netDataRow[1:])
-            # self.netInstances.append(netDataRow)
-
-            # vvvvvvvvvvv OO
             if self.nets[netID].name == netDataRow[0]:
                 del netDataRow[0]
                 for instanceName in netDataRow:
@@ -285,67 +223,14 @@ class Graph():
                 netID += 1
             i += 1
 
-
-            # found = False
-            # # netID = 0
-            # while not found and netID < len(self.nets):
-            #     # print self.nets[netID].name
-            #     if self.nets[netID].name == netDataRow[0]:
-            #         found = True
-            #     else:
-            #         netID += 1
-            # if found:
-            #     # print str(netDataRow[0]) + " found"
-            #     del netDataRow[0]
-            #     for j, instanceName in enumerate(netDataRow):
-            #         # instance = Instance(instanceName)
-            #         # self.nets[netID].addInstance(instance)
-            #         self.nets[netID].addInstance(instanceName)
-            # ^^^^^^^^^^^ OO
-
             printProgression(i, len(lines))
 
-        # self.netRows = len(self.netName)
-        # print (str("\t Nets: " + str(self.netRows) ))
-        # print "Done!"
-        # print "<---------------------------------------------------\n"
     
     def findHyperedges(self):
         print "Building hyperedges"
 
-        # for netID, nInstances in enumerate(self.netInstances):
-        #     connectedClusters = list()
-
-        #     # Now, for each net, we get its list of instances.
-        #     for instance in nInstances:
-
-        #         # And for each instance in the net, we check to which cluster
-        #         # that particular instance belongs.
-        #         for clusterID, cInstances in enumerate(self.clusterInstances):
-        #             # Try to find the instance from the net in the cluster
-        #             try:
-        #                 cInstanceIndex = cInstances.index(instance)
-        #             except:
-        #                 continue
-        #             else:
-        #                 # If found, see if the cluster has already been added
-        #                 # to connectedClusters.
-        #                 try:
-        #                     connectedClusterIndex = connectedClusters.index(clusterID)
-        #                 except:
-        #                     connectedClusters.append(clusterID)
-
-        #     if len(connectedClusters) > 1:
-        #         listID = [netID] # We want the netID to be inserted in the hyperedge row as a list.
-        #         connectedClusters.insert(0, listID)
-        #         self.hyperedges.append(connectedClusters)
-
-        # vvvvvvvvvvvvvv OO
-        # print "len(self.clusters) = " + str(len(self.clusters))
-        # print "len(self.nets) = " + str(len(self.nets))
         for i, net in enumerate(self.nets):
             connectedClusters = list()
-            # print "len(net.instances) = " + str(len(net.instances))
 
             # Now, for each net, we get its list of instances.
             for netInstance in net.instances: # netInstance are Instance object.
@@ -361,22 +246,16 @@ class Graph():
                         j = 0
                         clusterFound = False
                         while j < len(connectedClusters) and not clusterFound:
-                            # print type(connectedClusters[j])
                             if connectedClusters[j].ID == cluster.ID:
                                 clusterFound = True
                             else:
                                 j += 1
                         if not clusterFound:
                             connectedClusters.append(cluster)
-                        # try:
-                        #     connectedClusterIndex = connectedClusters.index(cluster.ID)
-                        # except:
-                        #     connectedClusters.append(cluster)
 
             # Append the list A of connected clusters to the list B of hyperedges
             # only if there are more than one cluster in list A.
             if len(connectedClusters) > 1:
-                # print "len(connectedClusters) > 1"
                 hyperedge = Hyperedge()
                 for cluster in connectedClusters:
                     hyperedge.addCluster(cluster)
@@ -384,45 +263,8 @@ class Graph():
                 self.hyperedges.append(hyperedge)
 
             printProgression(i, len(self.nets))
-        # print "len(self.hyperedges) = " + str(len(self.hyperedges))
-        # ^^^^^^^^^^^^^^ OO
 
-
-        # for hyperedge in self.hyperedges:
-            # print "Hyperedge:"
-            # for cluster in hyperedge.clusters:
-            #     print cluster.ID
-
-        # self.hyperedgesComprehensive = copy.deepcopy(self.hyperedges) # Keep the comprehensive data somewhere, just in case.
-
-        # print "Before merger:"
-        # print self.hyperedges
-        # Merge duplicates
         print "Merging hyperedges"
-        # for i, hyperedge in enumerate(self.hyperedges):
-        #     duplicate = False
-        #     j = i
-        #     while j < len(self.hyperedges):
-        #         if len(self.hyperedges[j]) == len(hyperedge) and j != i:
-        #             duplicate = True
-        #             # Check if all clusters in the hyperedge are the same
-        #             for k in xrange(1,len(self.hyperedges[j])):
-        #                 if self.hyperedges[j][k] != hyperedge[k]:
-        #                     duplicate = False
-
-        #             if duplicate:
-        #                 # Append the duplicate hyperedge net ID to the list.
-        #                 # Beware it's already (alone) in a list, so we need to access
-        #                 # the first element, hence that
-        #                 # [j=hyperedge][0=list of IDs][0=net ID]
-        #                 self.hyperedges[i][0].append(self.hyperedges[j][0][0])
-        #                 del self.hyperedges[j]
-        #             else:
-        #                 j += 1
-        #         else:
-        #             j += 1
-
-        # vvvvvvvvvvvvvvv OO
         i = 0
         while i < len(self.hyperedges):
             hyperedgeA = self.hyperedges[i]
@@ -515,49 +357,6 @@ class Graph():
                 i += 1
 
             printProgression(i, len(self.hyperedges))
-        # ^^^^^^^^^^^^^^^ OO
-
-        # print "After duplicates:"
-        # print self.hyperedges
-
-        # Next: merge the inclusions.
-        # print "Merging hyperedge inclusions"
-        # i = 0
-        # while i < len(self.hyperedges):
-        #     hyperedge = self.hyperedges[i]
-        #     j = 0
-        #     included = False
-        #     while j < len(self.hyperedges) and not included:
-        #         if j == i:
-        #             j += 1
-        #         else:
-        #             discard = False
-        #             k = 1
-        #             while not discard and k < len(hyperedge):
-        #                 try:
-        #                     clusterID = self.hyperedges[j][1:].index(hyperedge[k])
-        #                 except:
-        #                     discard = True
-        #                     j += 1
-        #                 else:
-        #                     k += 1
-
-        #                 if k == len(hyperedge):
-        #                     included = True
-
-        #             if included:
-        #                 for net in hyperedge[0]:
-        #                     self.hyperedges[j][0].append(net)
-        #                 del self.hyperedges[i]
-
-        #     if not included:
-        #         i += 1
-
-        # print "After merger:"
-        # print self.hyperedges
-
-
-
 
 
     def generateMetisInput(self, filename, edgeWeightType):
@@ -569,7 +368,6 @@ class Graph():
                 s += str(cluster.ID) + " "
         for cluster in self.clusters:
             s += "\n" + str(cluster.weights[0])
-        # print s
         with open(filename, 'w') as file:
             file.write(s)
 
@@ -579,8 +377,6 @@ class Graph():
 
         self.hyperedgeWeightsMax = [0] * EDGE_WEIGHTS_TYPES
         for i, hyperedge in enumerate(self.hyperedges):
-            # self.hyperedgeWeights.append(list())
-            # self.hyperedgeWeights[i] = [0] * EDGE_WEIGHTS_TYPES
             for weightType in xrange(0, EDGE_WEIGHTS_TYPES):
                 weight = 0
                 if weightType == 0:
@@ -608,8 +404,7 @@ class Graph():
                         WEIGHT_COMBILI_COEF * hyperedge.weights[0] + \
                         (1 - WEIGHT_COMBILI_COEF) * hyperedge.weights[1] )
 
-                hyperedge.setWeight(weightType, weight) # OO
-                # self.hyperedgeWeights[i][weightType] = weight
+                hyperedge.setWeight(weightType, weight)
                 # Save the max
                 if weight > self.hyperedgeWeightsMax[weightType]:
                     self.hyperedgeWeightsMax[weightType] = weight
@@ -618,29 +413,14 @@ class Graph():
 
         # Normalization
         if normalized:
-            # # Find max
-            # maxWeight = 0
-            # for weight in self.hyperedgeWeightsMax:
-            #     if weight > maxWeight:
-            #         maxWeight = weight
             maxWeight = 1000
             # Normalize
-            # for i in xrange(0, len(self.hyperedgeWeights)):
-            #     for j in xrange(0, EDGE_WEIGHTS_TYPES):
-            #         # There is no need to normalize the weights from which we chose the maximum weight (obviously)
-            #         if maxWeight != self.hyperedgeWeightsMax[j]:
-            #             self.hyperedgeWeights[i][j] = int((self.hyperedgeWeights[i][j] * maxWeight) / self.hyperedgeWeightsMax[j])
-            # vvvvvvvvvvv OO
             print self.hyperedgeWeightsMax
             for hyperedge in self.hyperedges:
                 for i in xrange(0, EDGE_WEIGHTS_TYPES):
                     hyperedge.setWeightNormalized(i, int(((hyperedge.weights[i] * maxWeight) / self.hyperedgeWeightsMax[i])) + 1)
                 print hyperedge.weights
-                print hyperedge.weightsNormalized
-            # ^^^^^^^^^^^ OO
-
-        # print self.hyperedgeWeights
-
+                print hyperedge.weightsNorm
 
 
     def computeVertexWeights(self):
@@ -648,11 +428,9 @@ class Graph():
         for i, cluster in enumerate(self.ClusterData):
             self.clusterWeights.append(cluster[5])
 
-        # vvvvvvvvvv OO
         for hyperedge in self.hyperedges:
             for cluster in hyperedge.clusters:
                 cluster.setWeight(0, cluster.area)
-        # ^^^^^^^^^^ OO
 
 
 
