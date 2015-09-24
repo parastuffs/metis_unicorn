@@ -6,9 +6,12 @@ Want to use it? Then check the 'METIS_PATH' and 'dirs' variables.
 
 """
 TODO
-> Object Oriented
 > Clean dead code
 > Doc
+> Reading the second net file takes way to much time.
+We should sort the nets list first, so that we would not have
+to run through it all for each god damn net.
+http://stackoverflow.com/a/403426/3973030
 """
 
 import math
@@ -180,58 +183,11 @@ class Graph():
             if found:
                 del clusterInstancesRow[0]
                 for i, instanceName in enumerate(clusterInstancesRow):
-                    instance = Instance(instanceName)
-                    self.clusters[clusterID].addInstance(instance)
+                    # instance = Instance(instanceName)
+                    # self.clusters[clusterID].addInstance(instance)
+                    self.clusters[clusterID].addInstance(instanceName)
             # ^^^^^^^^^^ OO
 
-        # print "Done!"
-        # print "<---------------------------------------------------\n"
-
-    def readNets(self, filename, hrows, frows):
-        # print "--------------------------------------------------->"
-        print (str("Reading nets file: " + filename))
-        with open(filename, 'r') as f:
-            lines = f.read().splitlines()
-
-        # Remove the header lines
-        for i in xrange(0, hrows):
-            del lines[0]
-        # Remove the footer lines
-        for i in xrange(0,frows):
-            del lines[-1]
-
-        for i,line in enumerate(lines):
-            line = line.strip(' \n')
-            line = line.replace('{','')
-            line = line.replace('}','')
-            netDataRow = line.split()
-            # self.netName.append(netDataRow[0])
-            # del netDataRow[0] # Remove the net name from the list
-            #                     # TODO: could also not delete it and simpy
-            #                     # append(netDataRow[1:])
-            # self.netInstances.append(netDataRow)
-
-            # vvvvvvvvvvv OO
-            found = False
-            netID = 0
-            while not found and netID < len(self.nets):
-                # print self.nets[netID].name
-                if self.nets[netID].name == netDataRow[0]:
-                    found = True
-                else:
-                    netID += 1
-            if found:
-                # print str(netDataRow[0]) + " found"
-                del netDataRow[0]
-                for j, instanceName in enumerate(netDataRow):
-                    instance = Instance(instanceName)
-                    self.nets[netID].addInstance(instance)
-            # ^^^^^^^^^^^ OO
-
-            printProgression(i, len(lines))
-
-        self.netRows = len(self.netName)
-        # print (str("\t Nets: " + str(self.netRows) ))
         # print "Done!"
         # print "<---------------------------------------------------\n"
 
@@ -253,9 +209,13 @@ class Graph():
         for i in xrange(0,frows):
             del lines[-1]
 
+        for i in xrange(0, len(lines)):
+            lines[i] = " ".join(lines[i].split())
+        lines.sort()
+
         for i, line in enumerate(lines):
             # line = line.strip(' \n')
-            line = " ".join(line.split()) # Remove all extra whitespace characters.
+            # line = " ".join(line.split()) # Remove all extra whitespace characters.
             netDataRow = line.split()
 
             # try:
@@ -275,6 +235,78 @@ class Graph():
             # ^^^^^^^^^^ OO
             printProgression(i, len(lines))
 
+        # print "Done!"
+        # print "<---------------------------------------------------\n"
+
+    def readNets(self, filename, hrows, frows):
+        # print "--------------------------------------------------->"
+        print (str("Reading nets file: " + filename))
+        with open(filename, 'r') as f:
+            lines = f.read().splitlines()
+
+        # Remove the header lines
+        for i in xrange(0, hrows):
+            del lines[0]
+        # Remove the footer lines
+        for i in xrange(0,frows):
+            del lines[-1]
+
+        lines.sort()
+
+        # for line in lines:
+        #     print line
+
+        # As the nets list is sorted, we should not run through all the
+        # self.nets list for each line.
+        # For each line, move forward in self.nets. If the net in the line
+        # is found, great! If not, no biggie, just keep moving forward.
+        netID = 0
+        i = 0
+        while i < len(lines) and netID < len(self.nets):
+        # for i,line in enumerate(lines):
+            line = lines[i]
+            line = line.strip(' \n')
+            line = line.replace('{','')
+            line = line.replace('}','')
+            netDataRow = line.split()
+            # self.netName.append(netDataRow[0])
+            # del netDataRow[0] # Remove the net name from the list
+            #                     # TODO: could also not delete it and simpy
+            #                     # append(netDataRow[1:])
+            # self.netInstances.append(netDataRow)
+
+            # vvvvvvvvvvv OO
+            if self.nets[netID].name == netDataRow[0]:
+                del netDataRow[0]
+                for instanceName in netDataRow:
+                    # instance = Instance(instanceName)
+                    # self.nets[netID].addInstance(instance)
+                    self.nets[netID].addInstance(instanceName)
+                netID += 1
+            i += 1
+
+
+            # found = False
+            # # netID = 0
+            # while not found and netID < len(self.nets):
+            #     # print self.nets[netID].name
+            #     if self.nets[netID].name == netDataRow[0]:
+            #         found = True
+            #     else:
+            #         netID += 1
+            # if found:
+            #     # print str(netDataRow[0]) + " found"
+            #     del netDataRow[0]
+            #     for j, instanceName in enumerate(netDataRow):
+            #         # instance = Instance(instanceName)
+            #         # self.nets[netID].addInstance(instance)
+            #         self.nets[netID].addInstance(instanceName)
+            # ^^^^^^^^^^^ OO
+
+            printProgression(i, len(lines))
+
+        # self.netRows = len(self.netName)
+        # print (str("\t Nets: " + str(self.netRows) ))
         # print "Done!"
         # print "<---------------------------------------------------\n"
     
@@ -356,10 +388,10 @@ class Graph():
         # ^^^^^^^^^^^^^^ OO
 
 
-        for hyperedge in self.hyperedges:
-            print "Hyperedge:"
-            for cluster in hyperedge.clusters:
-                print cluster.ID
+        # for hyperedge in self.hyperedges:
+            # print "Hyperedge:"
+            # for cluster in hyperedge.clusters:
+            #     print cluster.ID
 
         # self.hyperedgesComprehensive = copy.deepcopy(self.hyperedges) # Keep the comprehensive data somewhere, just in case.
 
@@ -599,9 +631,12 @@ class Graph():
             #         if maxWeight != self.hyperedgeWeightsMax[j]:
             #             self.hyperedgeWeights[i][j] = int((self.hyperedgeWeights[i][j] * maxWeight) / self.hyperedgeWeightsMax[j])
             # vvvvvvvvvvv OO
+            print self.hyperedgeWeightsMax
             for hyperedge in self.hyperedges:
                 for i in xrange(0, EDGE_WEIGHTS_TYPES):
-                    hyperedge.setWeightNormalized(i, int((hyperedge.weights[i] * maxWeight) / self.hyperedgeWeightsMax[i]))
+                    hyperedge.setWeightNormalized(i, int(((hyperedge.weights[i] * maxWeight) / self.hyperedgeWeightsMax[i])) + 1)
+                print hyperedge.weights
+                print hyperedge.weightsNormalized
             # ^^^^^^^^^^^ OO
 
         # print self.hyperedgeWeights
@@ -932,12 +967,18 @@ class Cluster:
     def searchInstance(self, instance):
         # print "Searching " + instance.name + " in cluster " + self.name
         found = False
-        i = 0
-        while not found and i < len(self.instances):
-            if self.instances[i].name == instance.name:
-                found = True
-            else:
-                i += 1
+        # i = 0
+        # while not found and i < len(self.instances):
+        #     if self.instances[i].name == instance.name:
+        #         found = True
+        #     else:
+        #         i += 1
+        try:
+            self.instances.index(instance)
+        except:
+            pass
+        else:
+            found = True
         return found
 
     def setArea(self, area):
@@ -1002,8 +1043,8 @@ if __name__ == "__main__":
 #    -------------------------------------------- 
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/CCX/ClusterLevel2/"]
     # dirs=["/Users/drago/Desktop/Current/test/inpt/CCX/ClusterLevel3/"]
-    dirs=["../input_files/"]
-    # dirs=["../ccx/"]
+    # dirs=["../input_files/"]
+    dirs=["../ccx/"]
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/SPC/"]
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/test/"]
 
