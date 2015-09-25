@@ -29,3 +29,6 @@
 *.dSYM/
 
 *~
+*.tcl
+*.hgr
+*.part.*
