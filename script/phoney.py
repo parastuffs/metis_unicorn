@@ -695,7 +695,16 @@ class Graph():
         fIn.close()
         print "Done!"
         # print "<---------------------------------------------------\n"
-
+        
+    def dumpClusters(self):
+        str = ""
+        for cluster in self.clusters:
+            str += namestr(cluster.ID) + "\t" + cluster.name
+        with open("clusters", 'w') as f:
+            f.write(str)
+            
+              
+              
 
 class Net:
     def __init__(self, name, netID):
@@ -882,5 +891,4 @@ if __name__ == "__main__":
                 graph.generateMetisInput(metisInput, edgeWeightType)
                 graph.GraphPartition(metisInput)
                 graph.WritePartitionDirectives(metisInput)
-
-
+        graph.dumpClusters()
