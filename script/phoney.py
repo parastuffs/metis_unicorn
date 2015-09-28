@@ -7,6 +7,7 @@ Want to use it? Then check the 'METIS_PATH' and 'dirs' variables.
 """
 TODO
 > Doc
+> Change the ID of the clusters so that it begins at 1 instead of 0.
 """
 
 import math
@@ -16,19 +17,30 @@ import copy
 global METIS_PATH
 METIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 EDGE_WEIGHTS_TYPES = 6
-VERTEX_WEIGHTS_TYPES = 1
+VERTEX_WEIGHTS_TYPES = 2
 WEIGHT_COMBILI_COEF = 0.5
+MAX_WEIGHT = 1000
 
 def printProgression(current, max):
-    if current == max/5:
+    if current == max/10:
+        print "10%"
+    elif current == max/5:
         print "20%"
-    if current == 2*max/5:
+    elif current == 3*max/10:
+        print "30%"
+    elif current == 2*max/5:
         print "40%"
-    if current == 3*max/5:
-        print"60%"
-    if current == 4*max/5:
+    elif current == max/2:
+        print "50%"
+    elif current == 3*max/5:
+        print "60%"
+    elif current == 7*max/10:
+        print "70%"
+    elif current == 4*max/5:
         print "80%"
-    if current == max:
+    elif current == 9*max/10:
+        print "90%"
+    elif current == max:
         print "100%"
 
 class Graph():
@@ -264,6 +276,16 @@ class Graph():
 
             printProgression(i, len(self.nets))
 
+        s = ""
+        for hyperedge in self.hyperedges:
+            s += str(len(hyperedge.clusters)) + "\t" + str(hyperedge.nets[0].name)
+            for cluster in hyperedge.clusters:
+                s += " " + str(cluster.name)
+            s += "\n"
+        with open("raw_hyperedges.out", 'w') as f:
+            f.write(s)
+
+
         print "Merging hyperedges"
         i = 0
         while i < len(self.hyperedges):
@@ -289,63 +311,64 @@ class Graph():
                         # Append the net from hyperedgeB to hyperedgeA.
                         # At this point, hyperedgeB only has one edge.
                         hyperedgeA.addNet(hyperedgeB.nets[0])
+                        hyperedgeA.connectivity += 1
                         del self.hyperedges[j]
                     else:
                         j += 1
 
 
-                # If hyperedgeA is smaller than hyperedgeB, check if
-                # A can be included in B.
-                elif len(hyperedgeA.clusters) < len(hyperedgeB.clusters):
-                    discard = False
-                    k = 0 # index for A's clusters
-                    while k < len(hyperedgeA.clusters) and not discard:
-                        included = False    # Reset for each loop, we want to know if
-                                            # every clusters from A are included in B.
-                        l = 0 # index for B's clusters
-                        while l < len(hyperedgeB.clusters) and not included:
-                            # print type(hyperedgeA.clusters[k])
-                            # print type(hyperedgeB.clusters[l])
-                            if hyperedgeA.clusters[k].name == hyperedgeB.clusters[l].name:
-                                included = True
-                            l += 1
-                        if not included:
-                            discard = True
-                        else:
-                            k += 1
-                    # The inclusion was not successful
-                    if discard:
-                        j += 1
-                    # Inclusion possible. Do it. Naow.
-                    else:
-                        clusterAMerged = True
-                        for net in hyperedgeA.nets:
-                            hyperedgeB.addNet(net)
-                        del self.hyperedges[i] # HyperedgeA
+                # # If hyperedgeA is smaller than hyperedgeB, check if
+                # # A can be included in B.
+                # elif len(hyperedgeA.clusters) < len(hyperedgeB.clusters):
+                #     discard = False
+                #     k = 0 # index for A's clusters
+                #     while k < len(hyperedgeA.clusters) and not discard:
+                #         included = False    # Reset for each loop, we want to know if
+                #                             # every clusters from A are included in B.
+                #         l = 0 # index for B's clusters
+                #         while l < len(hyperedgeB.clusters) and not included:
+                #             # print type(hyperedgeA.clusters[k])
+                #             # print type(hyperedgeB.clusters[l])
+                #             if hyperedgeA.clusters[k].name == hyperedgeB.clusters[l].name:
+                #                 included = True
+                #             l += 1
+                #         if not included:
+                #             discard = True
+                #         else:
+                #             k += 1
+                #     # The inclusion was not successful
+                #     if discard:
+                #         j += 1
+                #     # Inclusion possible. Do it. Naow.
+                #     else:
+                #         clusterAMerged = True
+                #         for net in hyperedgeA.nets:
+                #             hyperedgeB.addNet(net)
+                #         del self.hyperedges[i] # HyperedgeA
 
 
-                # If hyperedgeA is larger than hyperedgeB, check if
-                # B can be included in A.
-                elif len(hyperedgeA.clusters) > len(hyperedgeB.clusters):
-                    discard = False
-                    l = 0
-                    while l < len(hyperedgeB.clusters) and not discard:
-                        included = False
-                        k = 0
-                        while k < len(hyperedgeA.clusters) and not included:
-                            if hyperedgeB.clusters[l].name == hyperedgeA.clusters[k].name:
-                                included = True
-                            k += 1
-                        if not included:
-                            discard = True
-                        else:
-                            l += 1
-                    if discard:
-                        j += 1
-                    else:
-                        for net in hyperedgeB.nets:
-                            hyperedgeA.addNet(net)
-                        del self.hyperedges[j] # HyperedgeB
+                # # If hyperedgeA is larger than hyperedgeB, check if
+                # # B can be included in A.
+                # elif len(hyperedgeA.clusters) > len(hyperedgeB.clusters):
+                #     discard = False
+                #     l = 0
+                #     while l < len(hyperedgeB.clusters) and not discard:
+                #         included = False
+                #         k = 0
+                #         while k < len(hyperedgeA.clusters) and not included:
+                #             if hyperedgeB.clusters[l].name == hyperedgeA.clusters[k].name:
+                #                 included = True
+                #             k += 1
+                #         if not included:
+                #             discard = True
+                #         else:
+                #             l += 1
+                #     if discard:
+                #         j += 1
+                #     else:
+                #         for net in hyperedgeB.nets:
+                #             hyperedgeA.addNet(net)
+                #         del self.hyperedges[j] # HyperedgeB
 
                 else:
                     j += 1
@@ -359,15 +382,16 @@ class Graph():
             printProgression(i, len(self.hyperedges))
 
 
-    def generateMetisInput(self, filename, edgeWeightType):
+    def generateMetisInput(self, filename, edgeWeightType, vertexWeightType):
         print "Generating METIS input file..."
         s = str(len(self.hyperedges)) + " " + str(len(self.clusters)) + " 11"
         for i, hyperedge in enumerate(self.hyperedges):
             s += "\n" + str(hyperedge.weightsNormalized[edgeWeightType]) + " "
             for cluster in hyperedge.clusters:
-                s += str(cluster.ID) + " "
+                s += str(cluster.ID + 1) + " "  # hmetis does not like to have hyperedges
+                                                # beginning with a cluster of ID '0'.
         for cluster in self.clusters:
-            s += "\n" + str(cluster.weights[0])
+            s += "\n" + str(cluster.weightsNormalized[vertexWeightType])
         with open(filename, 'w') as file:
             file.write(s)
 
@@ -376,17 +400,19 @@ class Graph():
         print "Generating weights of hyperedges."
 
         self.hyperedgeWeightsMax = [0] * EDGE_WEIGHTS_TYPES
-        for i, hyperedge in enumerate(self.hyperedges):
-            for weightType in xrange(0, EDGE_WEIGHTS_TYPES):
+        for weightType in xrange(0, EDGE_WEIGHTS_TYPES):
+            for i, hyperedge in enumerate(self.hyperedges):
                 weight = 0
                 if weightType == 0:
                     # Number of wires
-                    for net in hyperedge.nets:
-                        weight += net.pins
+                    weight = hyperedge.connectivity
                 elif weightType == 1:
                     # Wire length
+                    wlTot = 0
                     for net in hyperedge.nets:
-                        weight += net.wl
+                        wlTot += net.wl
+                    wlAvg = wlTot / len(hyperedge.nets)
+                    weight = wlAvg
                 elif weightType == 2:
                     # 1/#wires
                     weight = 1.0 / hyperedge.weights[0]
@@ -396,41 +422,53 @@ class Graph():
                 elif weightType == 4:
                     # wire length and number of wires
                     weight = \
-                        WEIGHT_COMBILI_COEF * hyperedge.weights[0] + \
-                        (1 - WEIGHT_COMBILI_COEF) * hyperedge.weights[1]
+                        WEIGHT_COMBILI_COEF * hyperedge.weightsNormalized[0] + \
+                        (1 - WEIGHT_COMBILI_COEF) * hyperedge.weightsNormalized[1]
                 elif weightType == 5:
                     # 1 / (wire length and number of wires)
                     weight = 1.0 / ( \
-                        WEIGHT_COMBILI_COEF * hyperedge.weights[0] + \
-                        (1 - WEIGHT_COMBILI_COEF) * hyperedge.weights[1] )
+                        WEIGHT_COMBILI_COEF * hyperedge.weightsNormalized[0] + \
+                        (1 - WEIGHT_COMBILI_COEF) * hyperedge.weightsNormalized[1] )
 
                 hyperedge.setWeight(weightType, weight)
                 # Save the max
                 if weight > self.hyperedgeWeightsMax[weightType]:
                     self.hyperedgeWeightsMax[weightType] = weight
 
+            # Normalize
+            for hyperedge in self.hyperedges:
+                print hyperedge.weights
+                hyperedge.setWeightNormalized(weightType, int(((hyperedge.weights[weightType] * MAX_WEIGHT) / self.hyperedgeWeightsMax[weightType])) + 1)
+                # hyperedge.setWeightNormalized(weightType, int(math.exp(hyperedge.weights[weightType] / self.hyperedgeWeightsMax[weightType]) * MAX_WEIGHT))    
+                
         print self.hyperedgeWeightsMax
 
-        # Normalization
-        if normalized:
-            maxWeight = 1000
-            # Normalize
-            print self.hyperedgeWeightsMax
-            for hyperedge in self.hyperedges:
-                for i in xrange(0, EDGE_WEIGHTS_TYPES):
-                    hyperedge.setWeightNormalized(i, int(((hyperedge.weights[i] * maxWeight) / self.hyperedgeWeightsMax[i])) + 1)
-                print hyperedge.weights
-                print hyperedge.weightsNorm
 
 
     def computeVertexWeights(self):
         print "Generating weights of vertex."
-        for i, cluster in enumerate(self.ClusterData):
-            self.clusterWeights.append(cluster[5])
+        # for i, cluster in enumerate(self.ClusterData):
+        #     self.clusterWeights.append(cluster[5])
+        self.clusterWeightsMax = [0] * VERTEX_WEIGHTS_TYPES
 
         for hyperedge in self.hyperedges:
             for cluster in hyperedge.clusters:
-                cluster.setWeight(0, cluster.area)
+                for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+                    if weightType == 0:
+                        weight = cluster.area
+                    elif weightType == 1:
+                        weight = 1
+
+                    if weight > self.clusterWeightsMax[weightType]:
+                        self.clusterWeightsMax[weightType] = weight
+
+                    cluster.setWeight(weightType, weight)
+
+        for hyperedge in self.hyperedges:
+            for cluster in hyperedge.clusters:
+                for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+                    weight = ((cluster.weights[weightType] * MAX_WEIGHT) / self.clusterWeightsMax[weightType]) + 1
+                    cluster.setWeightNormalized(weightType, int(weight))
 
 
 
@@ -459,219 +497,220 @@ class Graph():
 
 
 
-    def ReadConnectivity(self, filename, hrows, frows):
-        print "--------------------------------------------------->"
-        print (str("Reading connectivity file: " + filename))
-        f = open(filename)
-        lines = f.readlines()
-        alllines=len(lines)
-        f.close()
-        count=1
-        for line in lines:
-            if (count > hrows) and (count < (alllines - frows + 1)):
-                t=line.rstrip()
-                tt = t.split()
-                self.ConnectData.append(tt)
-                self.name.append(tt[0])
-                self.ConnectRows +=1
-            count +=1
-        self.ConnectCols=len(self.ConnectData[0]) 
-        print (str("\t Edges: " + str(self.ConnectRows) + "\t Columns read: " + str(self.ConnectCols)))
-        print "Done!"
-        print "<---------------------------------------------------\n"
+    # def ReadConnectivity(self, filename, hrows, frows):
+    #     print "--------------------------------------------------->"
+    #     print (str("Reading connectivity file: " + filename))
+    #     f = open(filename)
+    #     lines = f.readlines()
+    #     alllines=len(lines)
+    #     f.close()
+    #     count=1
+    #     for line in lines:
+    #         if (count > hrows) and (count < (alllines - frows + 1)):
+    #             t=line.rstrip()
+    #             tt = t.split()
+    #             self.ConnectData.append(tt)
+    #             self.name.append(tt[0])
+    #             self.ConnectRows +=1
+    #         count +=1
+    #     self.ConnectCols=len(self.ConnectData[0]) 
+    #     print (str("\t Edges: " + str(self.ConnectRows) + "\t Columns read: " + str(self.ConnectCols)))
+    #     print "Done!"
+    #     print "<---------------------------------------------------\n"
     
-    def SplitComma(self):
-        for line in self.ClusterData:
-            LL = line[3].strip("()")
-            UR = line[4].strip("()")
-            LLsplit = LL.split(",")
-            URsplit = UR.split(",")
-            self.LLX.append(LLsplit[0])
-            self.LLY.append(LLsplit[1])
-            self.URX.append(URsplit[0])
-            self.URY.append(URsplit[1])
-            tmpCX=abs(float(URsplit[0])-(float(URsplit[0]) - float(LLsplit[0]))/2)
-            tmpCY=abs(float(URsplit[1])-(float(URsplit[1]) - float(LLsplit[1]))/2)
-            self.CX.append(str(tmpCX))
-            self.CY.append(str(tmpCY))
-            self.ClusterArea.append(str(line[5]))
+    # def SplitComma(self):
+    #     for line in self.ClusterData:
+    #         LL = line[3].strip("()")
+    #         UR = line[4].strip("()")
+    #         LLsplit = LL.split(",")
+    #         URsplit = UR.split(",")
+    #         self.LLX.append(LLsplit[0])
+    #         self.LLY.append(LLsplit[1])
+    #         self.URX.append(URsplit[0])
+    #         self.URY.append(URsplit[1])
+    #         tmpCX=abs(float(URsplit[0])-(float(URsplit[0]) - float(LLsplit[0]))/2)
+    #         tmpCY=abs(float(URsplit[1])-(float(URsplit[1]) - float(LLsplit[1]))/2)
+    #         self.CX.append(str(tmpCX))
+    #         self.CY.append(str(tmpCY))
+    #         self.ClusterArea.append(str(line[5]))
 
-    def BuildEdges(self):
-        print "--------------------------------------------------->"
-        # Check for Black Box that is taken as 2 columns 
-        # Check for line ends
-        print (str("Building connectivity..."))
-        print "\t N of nodes: " + str(self.ClusterRows)
-        print "\t N of edges: " + str(self.ConnectRows)
-        self.WriteLog("From building edges: ")
-        ### This will work only on simple edges
-        ### Scan according to edges 
-        count       = 0
-        maxWires    = 0
-        maxDistance = 0
-        maxwXd      = 0
-        totalEdgeLength = 0
-        totalEdgeWL = 0
-        for connection in self.ConnectData:
-            tmp = []
-            SRC = connection[0]
-            DST = connection[3]
-            E12E2 = int(connection[6])
-            E22E1 = int(connection[7])
-            E1E2  = int(connection[8])
-            wires = E12E2 + E22E1 + E1E2 
-            II = self.ClusterName.index(SRC)
-            KK = self.ClusterName.index(DST)
-            distance = float ( math.sqrt (\
-            (float(self.CX[II]) - float(self.CX[KK])) * (float(self.CX[II]) - float(self.CX[KK])) + \
-            (float(self.CY[II]) - float(self.CY[KK])) * (float(self.CY[II]) - float(self.CY[KK])))  )
-            wXd = float(distance) * float(wires)
-            tmp.append(SRC)
-            tmp.append(DST)
-            tmp.append(wires)
-            tmp.append(distance)
-            totalEdgeLength += float(distance)
-            totalEdgeWL += float(wXd)
-            tmp.append(wXd)
-            if (distance > maxDistance):
-                maxDistance = distance 
-            if (wires > maxWires):
-                maxWires= wires  
-            if (wXd > maxwXd):
-                maxwXd = wXd  
-            self.EdgeConnections.append(tmp)
-            msg = "SRC :" + str(SRC) + "\t DST: " + str(DST) + "\t Wires.: " + str(wires) + "\t Dist.: " + str(distance)
-            self.WriteLog(msg)
-        self.maxWires    = maxWires
-        self.maxDistance = maxDistance 
-        self.maxwXd      = maxwXd 
-        #self.WriteLog(self.EdgeConnections)
-        msg = "Max wires :" + str(self.maxWires) + "\t Max dist: " + str(self.maxDistance) + "\t Max wXd: " + str(self.maxwXd)
-        self.WriteLog(msg)
-        msg = "Total edge length:" + str(totalEdgeLength) + "\t Total WL: " + str(totalEdgeWL)  
-        self.WriteLog(msg)
-        for connection in self.EdgeConnections:
-            self.WriteLog(str("SRC: " + connection[0] + "\t DST: " + connection[1]))
-            found1=0
-            found2=0
-            for vertice in self.Vertices: 
-                if (vertice == connection[0]):
-                    found1=1
-                if (vertice == connection[1]):
-                    found2=1
-            if (found1 == 0) :
-                self.Vertices.append(connection[0])
-            if (found2 == 0):
-                self.Vertices.append(connection[1])
-        i=0
-        for vertice in self.Vertices:
-            self.WriteLog(str('%5s' % str(i) +"\t"+ str(vertice)))
-            i+=1
-        print "Actual vertices used: ", i-1
-        print "Done!"
-        print "<---------------------------------------------------\n"
+    # def BuildEdges(self):
+    #     print "--------------------------------------------------->"
+    #     # Check for Black Box that is taken as 2 columns 
+    #     # Check for line ends
+    #     print (str("Building connectivity..."))
+    #     print "\t N of nodes: " + str(self.ClusterRows)
+    #     print "\t N of edges: " + str(self.ConnectRows)
+    #     self.WriteLog("From building edges: ")
+    #     ### This will work only on simple edges
+    #     ### Scan according to edges 
+    #     count       = 0
+    #     maxWires    = 0
+    #     maxDistance = 0
+    #     maxwXd      = 0
+    #     totalEdgeLength = 0
+    #     totalEdgeWL = 0
+    #     for connection in self.ConnectData:
+    #         tmp = []
+    #         SRC = connection[0]
+    #         DST = connection[3]
+    #         E12E2 = int(connection[6])
+    #         E22E1 = int(connection[7])
+    #         E1E2  = int(connection[8])
+    #         wires = E12E2 + E22E1 + E1E2 
+    #         II = self.ClusterName.index(SRC)
+    #         KK = self.ClusterName.index(DST)
+    #         distance = float ( math.sqrt (\
+    #         (float(self.CX[II]) - float(self.CX[KK])) * (float(self.CX[II]) - float(self.CX[KK])) + \
+    #         (float(self.CY[II]) - float(self.CY[KK])) * (float(self.CY[II]) - float(self.CY[KK])))  )
+    #         wXd = float(distance) * float(wires)
+    #         tmp.append(SRC)
+    #         tmp.append(DST)
+    #         tmp.append(wires)
+    #         tmp.append(distance)
+    #         totalEdgeLength += float(distance)
+    #         totalEdgeWL += float(wXd)
+    #         tmp.append(wXd)
+    #         if (distance > maxDistance):
+    #             maxDistance = distance 
+    #         if (wires > maxWires):
+    #             maxWires= wires  
+    #         if (wXd > maxwXd):
+    #             maxwXd = wXd  
+    #         self.EdgeConnections.append(tmp)
+    #         msg = "SRC :" + str(SRC) + "\t DST: " + str(DST) + "\t Wires.: " + str(wires) + "\t Dist.: " + str(distance)
+    #         self.WriteLog(msg)
+    #     self.maxWires    = maxWires
+    #     self.maxDistance = maxDistance 
+    #     self.maxwXd      = maxwXd 
+    #     #self.WriteLog(self.EdgeConnections)
+    #     msg = "Max wires :" + str(self.maxWires) + "\t Max dist: " + str(self.maxDistance) + "\t Max wXd: " + str(self.maxwXd)
+    #     self.WriteLog(msg)
+    #     msg = "Total edge length:" + str(totalEdgeLength) + "\t Total WL: " + str(totalEdgeWL)  
+    #     self.WriteLog(msg)
+    #     for connection in self.EdgeConnections:
+    #         self.WriteLog(str("SRC: " + connection[0] + "\t DST: " + connection[1]))
+    #         found1=0
+    #         found2=0
+    #         for vertice in self.Vertices: 
+    #             if (vertice == connection[0]):
+    #                 found1=1
+    #             if (vertice == connection[1]):
+    #                 found2=1
+    #         if (found1 == 0) :
+    #             self.Vertices.append(connection[0])
+    #         if (found2 == 0):
+    #             self.Vertices.append(connection[1])
+    #     i=0
+    #     for vertice in self.Vertices:
+    #         self.WriteLog(str('%5s' % str(i) +"\t"+ str(vertice)))
+    #         i+=1
+    #     print "Actual vertices used: ", i-1
+    #     print "Done!"
+    #     print "<---------------------------------------------------\n"
 
-    def BuildEdgeWeight(self):
-        print "--------------------------------------------------->"
-        print "Building edge weights:"
-        tmp = []
-        for edge in self.EdgeConnections:        
-            # 0. N wires
-            tmp.append("%.0f" % float(float(edge[2]) / float(self.maxWires) * 1000 + 1))
-            # 1. distance
-            tmp.append("%.0f" % float(float(edge[3]) / float(self.maxDistance) * 10000 + 1 ))
-            # 2. wXd
-            tmp.append("%.0f" % float(float(edge[4]) / float(self.maxwXd) * 1000 + 1 ))
-            # 3. 1/ N wires
-        #    tmp.append("%.3f" % float(1/float(edge[2])*float(self.maxWires)))
-            tmp.append("%.0f" % float(1/float(edge[2]) * 1000 + 1))
-            # 4. 1/ distance
-            #tmp.append("%.3f" % float(1/float(edge[3])*float(self.maxDistance)))
-            tmp.append("%.0f" % float(1/(float(edge[3]) + 0.01) * 1000 + 1))
-            # 5. 1/ wXd
-            #tmp.append("%.3f" % float(1/float(edge[4])*float(self.maxwXd)))
-            tmp.append("%.0f" % float(1/(float(edge[4]) + 0.01) * 1000 + 1))
-            self.EdgeWeights.append(tmp)        
-            tmp = []
-        #print self.EdgeWeights 
-        print "<---------------------------------------------------"
-        print "Done!"
+    # def BuildEdgeWeight(self):
+    #     print "--------------------------------------------------->"
+    #     print "Building edge weights:"
+    #     tmp = []
+    #     for edge in self.EdgeConnections:        
+    #         # 0. N wires
+    #         tmp.append("%.0f" % float(float(edge[2]) / float(self.maxWires) * 1000 + 1))
+    #         # 1. distance
+    #         tmp.append("%.0f" % float(float(edge[3]) / float(self.maxDistance) * 10000 + 1 ))
+    #         # 2. wXd
+    #         tmp.append("%.0f" % float(float(edge[4]) / float(self.maxwXd) * 1000 + 1 ))
+    #         # 3. 1/ N wires
+    #     #    tmp.append("%.3f" % float(1/float(edge[2])*float(self.maxWires)))
+    #         tmp.append("%.0f" % float(1/float(edge[2]) * 1000 + 1))
+    #         # 4. 1/ distance
+    #         #tmp.append("%.3f" % float(1/float(edge[3])*float(self.maxDistance)))
+    #         tmp.append("%.0f" % float(1/(float(edge[3]) + 0.01) * 1000 + 1))
+    #         # 5. 1/ wXd
+    #         #tmp.append("%.3f" % float(1/float(edge[4])*float(self.maxwXd)))
+    #         tmp.append("%.0f" % float(1/(float(edge[4]) + 0.01) * 1000 + 1))
+    #         self.EdgeWeights.append(tmp)        
+    #         tmp = []
+    #     #print self.EdgeWeights 
+    #     print "<---------------------------------------------------"
+    #     print "Done!"
 
 #+++>
-    def WriteMetisFile(self, CostFunction):
-        print "--------------------------------------------------->"
-        print "Write output file for cost:" , CostFunction 
-        # Extract graph in .graph format for METIS and write file
-        filename ="partition" + str(CostFunction) + ".hgr"
-        f1 = open(filename,'w')
-        # Write preambule
-        f1.write(str(self.ConnectRows) + " "  + str(len(self.Vertices)) + " " + "11" + "\n")
-        cost = CostFunction
-        for edge in self.EdgeConnections:        
-            ii = self.EdgeConnections.index(edge)
-            SRC = self.EdgeConnections[ii][0]
-            DST = self.EdgeConnections[ii][1]
-            tmp ="Weight: " + str(self.EdgeWeights[ii][0]) + '%9s' % "\t SRC: " + str(self.Vertices.index(SRC)) + '%9s' % "\t DST: " + str(self.Vertices.index(DST)) 
-            self.WriteLog(tmp)
-            # write the appropriate cost for edges
-            f1.write(str(self.EdgeWeights[ii][cost]) + " " + str(int(self.Vertices.index(SRC)) + 1) + " " + str(int(self.Vertices.index(DST)) + 1) + "\n")
-        for vertice in self.Vertices:
-           II = self.ClusterName.index(vertice) 
-           f1.write(str(self.ClusterArea[II]) + "\n")
-        f1.close()            
-        print "<---------------------------------------------------"
-        print "Done!"
+    # def WriteMetisFile(self, CostFunction):
+    #     print "--------------------------------------------------->"
+    #     print "Write output file for cost:" , CostFunction 
+    #     # Extract graph in .graph format for METIS and write file
+    #     filename ="partition" + str(CostFunction) + ".hgr"
+    #     f1 = open(filename,'w')
+    #     # Write preambule
+    #     f1.write(str(self.ConnectRows) + " "  + str(len(self.Vertices)) + " " + "11" + "\n")
+    #     cost = CostFunction
+    #     for edge in self.EdgeConnections:        
+    #         ii = self.EdgeConnections.index(edge)
+    #         SRC = self.EdgeConnections[ii][0]
+    #         DST = self.EdgeConnections[ii][1]
+    #         tmp ="Weight: " + str(self.EdgeWeights[ii][0]) + '%9s' % "\t SRC: " + str(self.Vertices.index(SRC)) + '%9s' % "\t DST: " + str(self.Vertices.index(DST)) 
+    #         self.WriteLog(tmp)
+    #         # write the appropriate cost for edges
+    #         f1.write(str(self.EdgeWeights[ii][cost]) + " " + str(int(self.Vertices.index(SRC)) + 1) + " " + str(int(self.Vertices.index(DST)) + 1) + "\n")
+    #     for vertice in self.Vertices:
+    #        II = self.ClusterName.index(vertice) 
+    #        f1.write(str(self.ClusterArea[II]) + "\n")
+    #     f1.close()            
+    #     print "<---------------------------------------------------"
+    #     print "Done!"
 #+++>
-    def PrintData(self,mode):
-        f = open('output.rpt', 'w')
-        if(mode == 'v'): 
-            print "Clusters: " ,  self.ClusterRows
-            print self.toCluster
-        #for j in range (0, self.ClusterRows):
-        for j in range (0, len(self.toCluster)):
-            if (self.toCluster[j] != []):
-                txt = (str("Cluster: "+self.ClusterName[j]))
-                f.write(txt);
-                if(mode == 'v'): print(txt)
-                txt="\nis connected to clusters: \t" 
-                f.write(txt);
-                if (mode == 'v'): print(txt)
-                txt = str(self.toCluster[j])  
-                f.write(txt)
-                if (mode == 'v'): print(txt)
-                txt = "\nwith no of wires: \t" 
-                f.write(txt)
-                if (mode == 'v'): print(txt)
-                txt = str(self.Wires[j]) 
-                f.write(txt)
-                if (mode == 'v'): print(txt)
-                txt = "\nwith distances : \t" 
-                f.write(txt)
-                if (mode == 'v'): print(txt)
-                txt = str(self.toClusterDist[j]) 
-                f.write(txt)
-                if (mode == 'v'): print(txt)
-                txt = "\n" 
-                f.write(txt)
-                if (mode == 'v'): print(txt)
-                txt = "At ("+str(self.CX[j])+","+ str(self.CY[j])+")\t"  
-                f.write(txt)
-                if (mode == 'v'): print(txt)
-                txt = "(LLX,LLY) ("+ str(self.LLX[j])+","+str(self.LLY[j])+")\t"   
-                f.write(txt)
-                if (mode == 'v'): print(txt)
-                txt = "(URX,URY) ("+str(self.URX[j])+","+str(self.URY[j])+")\n"   
-                f.write(txt)
-                if (mode == 'v'): print(txt)
-                txt = "\n\n" 
-        f.close()
+    # def PrintData(self,mode):
+    #     f = open('output.rpt', 'w')
+    #     if(mode == 'v'): 
+    #         print "Clusters: " ,  self.ClusterRows
+    #         print self.toCluster
+    #     #for j in range (0, self.ClusterRows):
+    #     for j in range (0, len(self.toCluster)):
+    #         if (self.toCluster[j] != []):
+    #             txt = (str("Cluster: "+self.ClusterName[j]))
+    #             f.write(txt);
+    #             if(mode == 'v'): print(txt)
+    #             txt="\nis connected to clusters: \t" 
+    #             f.write(txt);
+    #             if (mode == 'v'): print(txt)
+    #             txt = str(self.toCluster[j])  
+    #             f.write(txt)
+    #             if (mode == 'v'): print(txt)
+    #             txt = "\nwith no of wires: \t" 
+    #             f.write(txt)
+    #             if (mode == 'v'): print(txt)
+    #             txt = str(self.Wires[j]) 
+    #             f.write(txt)
+    #             if (mode == 'v'): print(txt)
+    #             txt = "\nwith distances : \t" 
+    #             f.write(txt)
+    #             if (mode == 'v'): print(txt)
+    #             txt = str(self.toClusterDist[j]) 
+    #             f.write(txt)
+    #             if (mode == 'v'): print(txt)
+    #             txt = "\n" 
+    #             f.write(txt)
+    #             if (mode == 'v'): print(txt)
+    #             txt = "At ("+str(self.CX[j])+","+ str(self.CY[j])+")\t"  
+    #             f.write(txt)
+    #             if (mode == 'v'): print(txt)
+    #             txt = "(LLX,LLY) ("+ str(self.LLX[j])+","+str(self.LLY[j])+")\t"   
+    #             f.write(txt)
+    #             if (mode == 'v'): print(txt)
+    #             txt = "(URX,URY) ("+str(self.URX[j])+","+str(self.URY[j])+")\n"   
+    #             f.write(txt)
+    #             if (mode == 'v'): print(txt)
+    #             txt = "\n\n" 
+    #     f.close()
 
     def GraphPartition(self, filename):
         print "--------------------------------------------------->"
         # print "Running partition on cost: ", CostFunction
         print "Running hmetis with " + filename
         # call(["/Users/drago/bin/hmetis-1.5-osx-i686/hmetis",filename,"2","5","20","1","1","1","0","0"])
-        command = METIS_PATH + "hmetis " + filename + " 2 5 20 1 1 1 0 0"
+        # hmetis graphFile Nparts UBfactor Nruns Ctype Rtype Vcycle Reconst dbglvl
+        command = METIS_PATH + "hmetis " + filename + " 2 5 20 1 1 1 0 8"
         print "Calling '" + command + "'"
         # call([METIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
         call(command.split())
@@ -688,8 +727,8 @@ class Graph():
             print "Can't open file"
             return False
         data = fIn.readlines()
-        for i, cluster in enumerate(self.ClusterData):
-            fOut.write(str('add_to_die -cluster ' + "\t" + str(cluster[0]) + \
+        for i, cluster in enumerate(self.clusters):
+            fOut.write(str('add_to_die -cluster ' + "\t" + str(cluster.name) + \
                 "\t -die Die" + str(data[i])))
         fOut.close()
         fIn.close()
@@ -697,11 +736,11 @@ class Graph():
         # print "<---------------------------------------------------\n"
         
     def dumpClusters(self):
-        str = ""
+        s = ""
         for cluster in self.clusters:
-            str += namestr(cluster.ID) + "\t" + cluster.name
+            s += str(cluster.ID) + "\t" + cluster.name
         with open("clusters", 'w') as f:
-            f.write(str)
+            f.write(s)
             
               
               
@@ -794,6 +833,7 @@ class Hyperedge:
 
         self.weights = [0] * EDGE_WEIGHTS_TYPES
         self.weightsNormalized = [0] * EDGE_WEIGHTS_TYPES
+        self.connectivity = 1 # Number of connection between the cluster inside the hyperedge.
 
     def addNet(self, net):
         self.nets.append(net)
@@ -830,8 +870,9 @@ if __name__ == "__main__":
 #    -------------------------------------------- 
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/CCX/ClusterLevel2/"]
     # dirs=["/Users/drago/Desktop/Current/test/inpt/CCX/ClusterLevel3/"]
-    # dirs=["../input_files/"]
-    dirs=["../ccx/"]
+    dirs=["../input_files/"]
+    # dirs=["../ccx/"]
+    # dirs = ["../MPSoC/"]
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/SPC/"]
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/test/"]
 
@@ -859,8 +900,8 @@ if __name__ == "__main__":
         graph.computeVertexWeights()
 
         for edgeWeightType in xrange(0, EDGE_WEIGHTS_TYPES):
-            metisInput = "input"
             for vertexWeightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+                metisInput = "input"
                 print "================================================="
                 if edgeWeightType == 0:
                     print "> Edge weight: # wires"
@@ -886,9 +927,12 @@ if __name__ == "__main__":
                 if vertexWeightType == 0:
                     print "> Vertex weight: cluster area"
                     metisInput += "_area"
+                elif vertexWeightType == 1:
+                    print "> Vertex weight: constant 1"
+                    metisInput += "_constant"
                 print "================================================="
                 metisInput += ".hgr"
-                graph.generateMetisInput(metisInput, edgeWeightType)
+                graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                 graph.GraphPartition(metisInput)
                 graph.WritePartitionDirectives(metisInput)
         graph.dumpClusters()
