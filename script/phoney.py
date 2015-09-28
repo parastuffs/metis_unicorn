@@ -17,7 +17,7 @@ import copy
 global METIS_PATH
 METIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 EDGE_WEIGHTS_TYPES = 6
-VERTEX_WEIGHTS_TYPES = 2
+VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
 
@@ -437,11 +437,11 @@ class Graph():
 
             # Normalize
             for hyperedge in self.hyperedges:
-                print hyperedge.weights
+                # print hyperedge.weights
                 hyperedge.setWeightNormalized(weightType, int(((hyperedge.weights[weightType] * MAX_WEIGHT) / self.hyperedgeWeightsMax[weightType])) + 1)
                 # hyperedge.setWeightNormalized(weightType, int(math.exp(hyperedge.weights[weightType] / self.hyperedgeWeightsMax[weightType]) * MAX_WEIGHT))    
                 
-        print self.hyperedgeWeightsMax
+        # print self.hyperedgeWeightsMax
 
 
 
@@ -741,8 +741,48 @@ class Graph():
             s += str(cluster.ID) + "\t" + cluster.name
         with open("clusters", 'w') as f:
             f.write(s)
-            
-              
+
+    def hammingReport(self, filenames):
+        partitions = []
+        table = ""
+
+        part = 0
+        for filename in filenames:
+            # Print the header, but ommit '0'
+            if part > 0:
+                table += str(part)# Table header
+            table += "\t"
+            part += 1
+
+            with open(filename, 'r') as f:
+                lines = f.read().splitlines()
+                for i in xrange(0, len(lines)):
+                    lines[i] = lines[i].strip(' \n')
+                partitions.append(lines)
+                print lines
+
+        table += "\n"
+
+        for i in xrange(0, len(partitions) - 1): # ommit the last line, it has already been done as the last column
+            table += str(i) + "\t" # Row name
+            table += "\t" * i
+            for j in xrange(i + 1, len(partitions)):
+                hammingDistance = 0
+                for bit in xrange(0, len(partitions[i])):
+                    if partitions[i][bit] != partitions[j][bit]:
+                        hammingDistance += 1
+                if hammingDistance == len(partitions[i]):
+                    table += "inv\t"
+                else:
+                    table += str(hammingDistance) + "\t"
+            table += "\n"
+
+        part = 0
+        table += "Legend:\n"
+        for filename in filenames:
+            table += str(part) + ":\t" + filename + "\n"
+            part += 1
+        print table
               
 
 class Net:
@@ -899,6 +939,8 @@ if __name__ == "__main__":
         graph.computeHyperedgeWeights(True)
         graph.computeVertexWeights()
 
+        paritionFiles = []
+
         for edgeWeightType in xrange(0, EDGE_WEIGHTS_TYPES):
             for vertexWeightType in xrange(0, VERTEX_WEIGHTS_TYPES):
                 metisInput = "input"
@@ -935,4 +977,6 @@ if __name__ == "__main__":
                 graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                 graph.GraphPartition(metisInput)
                 graph.WritePartitionDirectives(metisInput)
+                paritionFiles.append(str(metisInput + ".part.2"))
         graph.dumpClusters()
+        graph.hammingReport(paritionFiles)
