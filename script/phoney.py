@@ -1,7 +1,7 @@
 """
 PHONEY [Pronounce 'poney'], Partitioning of Hypergraph Obviously Not EasY
 
-Want to use it? Then check the 'METIS_PATH' and 'dirs' variables.
+Want to use it? Then check the 'HMETIS_PATH' and 'dirs' variables.
 """
 
 """
@@ -13,13 +13,16 @@ TODO
 import math
 from subprocess import call
 import copy
+import matplotlib.pyplot as plt
 
-global METIS_PATH
-METIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
-EDGE_WEIGHTS_TYPES = 6
+global HMETIS_PATH
+HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
+METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
+EDGE_WEIGHTS_TYPES = 7
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
+SIMPLE_GRAPH = True
 
 def printProgression(current, max):
     if current == max/10:
@@ -238,8 +241,21 @@ class Graph():
             printProgression(i, len(lines))
 
     
-    def findHyperedges(self):
+    def findHyperedges(self, simpleGraph):
         print "Building hyperedges"
+
+
+        # for i, cluster in enumerate(self.clusters):
+        #     connctedClusters = list()
+        #     for clusterInstance in cluster.instances:
+        #         for net in self.nets:
+
+        #             if net.searchInstance(clusterInstance):
+        #                 for 
+
+
+
+
 
         for i, net in enumerate(self.nets):
             connectedClusters = list()
@@ -268,11 +284,20 @@ class Graph():
             # Append the list A of connected clusters to the list B of hyperedges
             # only if there are more than one cluster in list A.
             if len(connectedClusters) > 1:
-                hyperedge = Hyperedge()
-                for cluster in connectedClusters:
-                    hyperedge.addCluster(cluster)
-                hyperedge.addNet(net)
-                self.hyperedges.append(hyperedge)
+                if simpleGraph:
+                    for i in xrange(0,len(connectedClusters)):
+                        for j in xrange(i + 1, len(connectedClusters)):
+                            hyperedge = Hyperedge()
+                            hyperedge.addCluster(connectedClusters[i])
+                            hyperedge.addCluster(connectedClusters[j])
+                            hyperedge.addNet(net)
+                            self.hyperedges.append(hyperedge)
+                else:
+                    hyperedge = Hyperedge()
+                    for cluster in connectedClusters:
+                        hyperedge.addCluster(cluster)
+                    hyperedge.addNet(net)
+                    self.hyperedges.append(hyperedge)
 
             printProgression(i, len(self.nets))
 
@@ -315,7 +340,6 @@ class Graph():
                         del self.hyperedges[j]
                     else:
                         j += 1
-
 
                 # # If hyperedgeA is smaller than hyperedgeB, check if
                 # # A can be included in B.
@@ -381,17 +405,44 @@ class Graph():
 
             printProgression(i, len(self.hyperedges))
 
+        if SIMPLE_GRAPH:
+            print "Prepare simple graph"
+            for i, hyperedge in enumerate(self.hyperedges):
+                for k, clusterA in enumerate(hyperedge.clusters):
+                    for l, clusterB in enumerate(hyperedge.clusters):
+                        if l != k:
+                            clusterA.connectedClusters.append(clusterB)
+                            clusterA.connectedEdges.append(hyperedge)
+
+
+
+
+        # for hyperedge in self.hyperedges:
+        #     print hyperedge.clusters
+
 
     def generateMetisInput(self, filename, edgeWeightType, vertexWeightType):
         print "Generating METIS input file..."
-        s = str(len(self.hyperedges)) + " " + str(len(self.clusters)) + " 11"
-        for i, hyperedge in enumerate(self.hyperedges):
-            s += "\n" + str(hyperedge.weightsNormalized[edgeWeightType]) + " "
-            for cluster in hyperedge.clusters:
-                s += str(cluster.ID + 1) + " "  # hmetis does not like to have hyperedges
-                                                # beginning with a cluster of ID '0'.
-        for cluster in self.clusters:
-            s += "\n" + str(cluster.weightsNormalized[vertexWeightType])
+        s = ""
+        if SIMPLE_GRAPH:
+            s = str(len(self.clusters)) + " " + str(len(self.hyperedges)) + " 011"
+
+            for i, cluster in enumerate(self.clusters):
+                s += "\n" + str(cluster.weightsNormalized[vertexWeightType])
+                for j in xrange(0, len(cluster.connectedClusters)):
+                    s += " " + str(cluster.connectedClusters[j].ID + 1) + \
+                        " " + str(cluster.connectedEdges[j].weightsNormalized[edgeWeightType])
+
+
+        else:
+            s = str(len(self.hyperedges)) + " " + str(len(self.clusters)) + " 11"
+            for i, hyperedge in enumerate(self.hyperedges):
+                s += "\n" + str(hyperedge.weightsNormalized[edgeWeightType]) + " "
+                for cluster in hyperedge.clusters:
+                    s += str(cluster.ID + 1) + " "  # hmetis does not like to have hyperedges
+                                                    # beginning with a cluster of ID '0'.
+            for cluster in self.clusters:
+                s += "\n" + str(cluster.weightsNormalized[vertexWeightType])
         with open(filename, 'w') as file:
             file.write(s)
 
@@ -429,6 +480,9 @@ class Graph():
                     weight = 1.0 / ( \
                         WEIGHT_COMBILI_COEF * hyperedge.weightsNormalized[0] + \
                         (1 - WEIGHT_COMBILI_COEF) * hyperedge.weightsNormalized[1] )
+                elif weightType == 6:
+                    # Constant
+                    weight = 1
 
                 hyperedge.setWeight(weightType, weight)
                 # Save the max
@@ -710,9 +764,13 @@ class Graph():
         print "Running hmetis with " + filename
         # call(["/Users/drago/bin/hmetis-1.5-osx-i686/hmetis",filename,"2","5","20","1","1","1","0","0"])
         # hmetis graphFile Nparts UBfactor Nruns Ctype Rtype Vcycle Reconst dbglvl
-        command = METIS_PATH + "hmetis " + filename + " 2 5 20 1 1 1 0 8"
-        print "Calling '" + command + "'"
-        # call([METIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
+        command = ""
+        if SIMPLE_GRAPH:
+            command = METIS_PATH + "gpmetis " + filename + " 2 -dbglvl=0"
+        else:
+            command = HMETIS_PATH + "hmetis " + filename + " 2 5 20 1 1 1 0 8"
+            print "Calling '" + command + "'"
+        # call([HMETIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
         call(command.split())
     
     def WritePartitionDirectives(self, metisFile):
@@ -783,7 +841,26 @@ class Graph():
             table += str(part) + ":\t" + filename + "\n"
             part += 1
         print table
+
+
+
+    def plotWeights(self):
+        # weights = [0] * EDGE_WEIGHTS_TYPES
+        weights = []
+        styles = ['b', 'r', 'g', 'c', 'm', 'y', 'k']
+        for i in xrange(0, EDGE_WEIGHTS_TYPES):
+            weights.append(list())
+        for hyperedge in self.hyperedges:
+            for i in xrange (0, EDGE_WEIGHTS_TYPES):
+                weights[i].append(hyperedge.weightsNormalized[i])
+        print weights[0]
+        for i in xrange(0, EDGE_WEIGHTS_TYPES):
+            plt.plot(weights[i], styles[i])
+        plt.show()
               
+
+
+
 
 class Net:
     def __init__(self, name, netID):
@@ -802,6 +879,16 @@ class Net:
     def addInstance(self, instance):
         self.instances.append(instance)
 
+    def searchInstance(self, instance):
+        found = False
+        try:
+            self.instances.index(instance)
+        except:
+            pass
+        else:
+            found = True
+        return found
+
 
 class Cluster:
     def __init__(self, name, clusterID):
@@ -814,6 +901,11 @@ class Cluster:
                             # [1] = power
                             # [2] = area & power
         self.weightsNormalized = []
+        self.connectedClusters = [] # List of Cluster objects connected to this cluster.
+        self.connectedEdges = []    # List of Hyperedge objects.
+                                    # They are the edges connecting this cluster to others.
+                                    # Those hyperedges are needed to establish weights.
+                                    # connectedEdges[i] connects to conectedClusters[i]
 
         self.weights = [0] * VERTEX_WEIGHTS_TYPES
         self.weightsNormalized = [0] * VERTEX_WEIGHTS_TYPES
@@ -855,6 +947,17 @@ class Cluster:
 
     def setWeightNormalized(self, index, weight):
         self.weightsNormalized[index] = weight
+
+    def searchConnectedCluster(self, cluster):
+        found = False
+        index = -1
+        try:
+            index = self.connectedClusters.index(cluster)
+        except:
+            pass
+        else:
+            found = True
+        return index, found
 
 
 class Hyperedge:
@@ -933,7 +1036,7 @@ if __name__ == "__main__":
         graph.readNetsWireLength(netsWL, 14, 2)
         graph.readNets(netsInstances, 0, 0)
 
-        graph.findHyperedges()
+        graph.findHyperedges(simpleGraph=SIMPLE_GRAPH)
 
         edgeWeightType = 0
         graph.computeHyperedgeWeights(True)
@@ -965,6 +1068,9 @@ if __name__ == "__main__":
                     print "> Edge weight: 1 / " + str(WEIGHT_COMBILI_COEF) + " * # wires + " + \
                         str(1 - WEIGHT_COMBILI_COEF) + " * wire length"
                     metisInput += "_1-over-wires-wire-length"
+                elif edgeWeightType == 6:
+                    print "> Edge weight: 1 (constant)"
+                    metisInput += "_1-constant"
 
                 if vertexWeightType == 0:
                     print "> Vertex weight: cluster area"
@@ -980,3 +1086,4 @@ if __name__ == "__main__":
                 paritionFiles.append(str(metisInput + ".part.2"))
         graph.dumpClusters()
         graph.hammingReport(paritionFiles)
+        # graph.plotWeights()
