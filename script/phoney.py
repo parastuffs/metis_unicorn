@@ -15,6 +15,7 @@ from subprocess import call
 import copy
 import matplotlib.pyplot as plt
 import threading
+from multiprocessing import Process, Pipe
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
@@ -24,7 +25,7 @@ VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
 SIMPLE_GRAPH = False
-THREADS = 2
+THREADS = 3
 
 def printProgression(current, max):
     progression = ""
@@ -49,6 +50,70 @@ def printProgression(current, max):
     elif current == max:
         progression = "100%"
     return progression
+
+
+def buildHyperedges(processID, startIndex, endIndex, nets, clusters, pipe):
+
+    hyperedges = []
+    print "in process"
+    # print clusters
+    i = startIndex
+    while i < endIndex:
+        net = nets[i]
+        connectedClusters = list()
+
+        # Now, for each net, we get its list of instances.
+        for netInstance in net.instances: # netInstance are Instance object.
+
+            # And for each instance in the net, we check to which cluster
+            # that particular instance belongs.
+            for cluster in clusters:
+                # Try to find the instance from the net in the cluster
+                if cluster.searchInstance(netInstance):
+                    # If found, see if the cluster has already been added
+                    # to connectedClusters.
+                    j = 0
+                    clusterFound = False
+                    while j < len(connectedClusters) and not clusterFound:
+                        if connectedClusters[j].ID == cluster.ID:
+                            clusterFound = True
+                        else:
+                            j += 1
+                    if not clusterFound:
+                        connectedClusters.append(cluster)
+
+        # Append the list A of connected clusters to the list B of hyperedges
+        # only if there are more than one cluster in list A.
+        if len(connectedClusters) > 1:
+            if SIMPLE_GRAPH:
+                for i in xrange(0,len(connectedClusters)):
+                    for j in xrange(i + 1, len(connectedClusters)):
+                        hyperedge = Hyperedge()
+                        hyperedge.addCluster(connectedClusters[i])
+                        hyperedge.addCluster(connectedClusters[j])
+                        hyperedge.addNet(net)
+                        hyperedges.append(hyperedge)
+            else:
+                hyperedge = Hyperedge()
+                for cluster in connectedClusters:
+                    # print cluster
+                    hyperedge.addCluster(cluster)
+                hyperedge.addNet(net)
+                hyperedges.append(hyperedge)
+
+        progression = printProgression(i - startIndex, endIndex - startIndex)
+        if progression != "":
+            print "Process " + str(processID) + " " + progression
+        i += 1
+
+
+    # for h in hyperedges:
+    #     print h.clusters
+
+    pipe.send(hyperedges)
+    pipe.close()
+
+
 
 class myThread (threading.Thread):
     def __init__(self, threadID, graph, start, end):
@@ -371,23 +436,48 @@ class Graph():
         #             if net.searchInstance(clusterInstance):
         #                 for 
 
-        threads = []
+
+        processes = []
+        pipes = []
+        print "Before processes"
+        # print self.clusters
 
         for i in xrange(0, THREADS):
-            thread = myThread(i, self, i * len(self.nets) / THREADS, (i + 1) * len(self.nets) / THREADS)
-            thread.start()
-            threads.append(thread)
+            parent_pipe, child_pipe = Pipe()
+            pipes.append(parent_pipe)
+            process = Process(target=buildHyperedges, args=(i, \
+                i * len(self.nets) / THREADS, \
+                (i + 1) * len(self.nets) / THREADS, \
+                self.nets, \
+                self.clusters, \
+                child_pipe,))
+            process.start()
+            processes.append(process)
 
-        # thread1 = myThread(1, self, 0, len(self.nets)/2)
-        # threads.append(thread1)
-        # thread2 = myThread(2, self, len(self.nets)/2 + 1, len(self.nets))
-        # threads.append(thread2)
-        # thread1.start()
-        # thread2.start()
+        for i, pipe in enumerate(pipes):
+            print "Waiting pipe from process " + str(i)
+            hyperedges = pipe.recv()
+            for hyperedge in hyperedges:
+                self.hyperedges.append(hyperedge)
 
-        for i, thread in enumerate(threads):
-            print "waiting for thread " + str(i) + " to be over"
-            thread.join()
+        for process in processes:
+            process.join()
+
+        # for h in self.hyperedges:
+        #     for c in h.clusters:
+        #         print c.area
+
+
+        # threads = []
+
+        # for i in xrange(0, THREADS):
+        #     thread = myThread(i, self, i * len(self.nets) / THREADS, (i + 1) * len(self.nets) / THREADS)
+        #     thread.start()
+        #     threads.append(thread)
+
+        # for i, thread in enumerate(threads):
+        #     print "waiting for thread " + str(i) + " to be over"
+        #     thread.join()
 
 
 
@@ -642,24 +732,41 @@ class Graph():
         #     self.clusterWeights.append(cluster[5])
         self.clusterWeightsMax = [0] * VERTEX_WEIGHTS_TYPES
 
-        for hyperedge in self.hyperedges:
-            for cluster in hyperedge.clusters:
-                for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
-                    if weightType == 0:
-                        weight = cluster.area
-                    elif weightType == 1:
-                        weight = 1
+        # for hyperedge in self.hyperedges:
+        #     for cluster in hyperedge.clusters:
+        #         for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+        #             if weightType == 0:
+        #                 weight = cluster.area
+        #             elif weightType == 1:
+        #                 weight = 1
 
-                    if weight > self.clusterWeightsMax[weightType]:
-                        self.clusterWeightsMax[weightType] = weight
+        #             if weight > self.clusterWeightsMax[weightType]:
+        #                 self.clusterWeightsMax[weightType] = weight
 
-                    cluster.setWeight(weightType, weight)
+        #             cluster.setWeight(weightType, weight)
 
-        for hyperedge in self.hyperedges:
-            for cluster in hyperedge.clusters:
-                for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
-                    weight = ((cluster.weights[weightType] * MAX_WEIGHT) / self.clusterWeightsMax[weightType]) + 1
-                    cluster.setWeightNormalized(weightType, int(weight))
+        # for hyperedge in self.hyperedges:
+        #     for cluster in hyperedge.clusters:
+        #         for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+        #             weight = ((cluster.weights[weightType] * MAX_WEIGHT) / self.clusterWeightsMax[weightType]) + 1
+        #             cluster.setWeightNormalized(weightType, int(weight))
+
+        for cluster in self.clusters:
+            for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+                if weightType == 0:
+                    weight = cluster.area
+                elif weightType == 1:
+                    weight = 1
+
+                if weight > self.clusterWeightsMax[weightType]:
+                    self.clusterWeightsMax[weightType] = weight
+
+                cluster.setWeight(weightType, weight)
+
+        for cluster in self.clusters:
+            for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+                weight = ((cluster.weights[weightType] * MAX_WEIGHT) / self.clusterWeightsMax[weightType]) + 1
+                cluster.setWeightNormalized(weightType, int(weight))
 
 
 
