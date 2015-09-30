@@ -330,8 +330,9 @@ class Graph():
             #[10]: instance
             blockRow = line.split()
             # print blockRow
+            existingClustersCount = len(self.clusters) # Clusters already in the list before.
             if len(line) > 0:
-                memoryBlock = Cluster(blockRow[0], len(self.clusters) + i)
+                memoryBlock = Cluster(blockRow[0], existingClustersCount + i)
                 
                 memoryBlock.setArea(float(blockRow[6]))
                 memoryBlock.addInstance(blockRow[10])
