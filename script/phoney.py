@@ -14,6 +14,7 @@ import math
 from subprocess import call
 import copy
 import matplotlib.pyplot as plt
+import threading
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
@@ -22,29 +23,96 @@ EDGE_WEIGHTS_TYPES = 7
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
-SIMPLE_GRAPH = True
+SIMPLE_GRAPH = False
+THREADS = 2
 
 def printProgression(current, max):
+    progression = ""
     if current == max/10:
-        print "10%"
+        progression = "10%"
     elif current == max/5:
-        print "20%"
+        progression = "20%"
     elif current == 3*max/10:
-        print "30%"
+        progression = "30%"
     elif current == 2*max/5:
-        print "40%"
+        progression = "40%"
     elif current == max/2:
-        print "50%"
+        progression = "50%"
     elif current == 3*max/5:
-        print "60%"
+        progression = "60%"
     elif current == 7*max/10:
-        print "70%"
+        progression = "70%"
     elif current == 4*max/5:
-        print "80%"
+        progression = "80%"
     elif current == 9*max/10:
-        print "90%"
+        progression = "90%"
     elif current == max:
-        print "100%"
+        progression = "100%"
+    return progression
+
+class myThread (threading.Thread):
+    def __init__(self, threadID, graph, start, end):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.graph = graph
+        self.startIndex = start
+        self.endIndex = end
+        print str(self.threadID) + " " + str(start) + " " + str(end)
+
+    def run(self):
+        # print type(self.graph)
+        # print self.graph
+
+        i = self.startIndex
+        while i < self.endIndex:
+            net = self.graph.nets[i]
+            connectedClusters = list()
+
+            # Now, for each net, we get its list of instances.
+            for netInstance in net.instances: # netInstance are Instance object.
+
+                # And for each instance in the net, we check to which cluster
+                # that particular instance belongs.
+                for cluster in self.graph.clusters:
+
+                    # Try to find the instance from the net in the cluster
+                    if cluster.searchInstance(netInstance):
+                        # If found, see if the cluster has already been added
+                        # to connectedClusters.
+                        j = 0
+                        clusterFound = False
+                        while j < len(connectedClusters) and not clusterFound:
+                            if connectedClusters[j].ID == cluster.ID:
+                                clusterFound = True
+                            else:
+                                j += 1
+                        if not clusterFound:
+                            connectedClusters.append(cluster)
+
+            # Append the list A of connected clusters to the list B of hyperedges
+            # only if there are more than one cluster in list A.
+            if len(connectedClusters) > 1:
+                if SIMPLE_GRAPH:
+                    for i in xrange(0,len(connectedClusters)):
+                        for j in xrange(i + 1, len(connectedClusters)):
+                            hyperedge = Hyperedge()
+                            hyperedge.addCluster(connectedClusters[i])
+                            hyperedge.addCluster(connectedClusters[j])
+                            hyperedge.addNet(net)
+                            self.graph.hyperedges.append(hyperedge)
+                else:
+                    hyperedge = Hyperedge()
+                    for cluster in connectedClusters:
+                        hyperedge.addCluster(cluster)
+                    hyperedge.addNet(net)
+                    self.graph.hyperedges.append(hyperedge)
+
+            progression = printProgression(i - self.startIndex, self.endIndex - self.startIndex)
+            if progression != "":
+                print "Thread " + str(self.threadID) + " " + progression
+            i += 1
+
+
 
 class Graph():
     def __init__(self):
@@ -172,6 +240,51 @@ class Graph():
                     self.clusters[clusterID].addInstance(instanceName)
 
 
+    def readMemoryBlocks(self, filename, hrows, frows):
+        print (str("Reading memory blocks file: " + filename))
+        with open(filename, 'r') as f:
+            lines = f.read().splitlines()
+
+        # Remove the header lines
+        for i in xrange(0, hrows):
+            del lines[0]
+        # Remove the footer lines
+        for i in xrange(0,frows):
+            del lines[-1]
+
+        for i in xrange(0, len(lines)):
+            lines[i] = " ".join(lines[i].split())
+
+        i = 0
+        while i < len(lines):
+            # print str(i)
+            line = lines[i]
+            #[0]: block name
+            #[2]: instance count
+            #[6]: total area
+            #[10]: instance
+            blockRow = line.split()
+            # print blockRow
+            if len(line) > 0:
+                memoryBlock = Cluster(blockRow[0], len(self.clusters) + i)
+                
+                memoryBlock.setArea(float(blockRow[6]))
+                memoryBlock.addInstance(blockRow[10])
+
+                for j in xrange(1, int(blockRow[2])):
+                    i += 1
+                    line = lines[i]
+                    subBlockRow = line.split()
+                    # print subBlockRow
+                    memoryBlock.addInstance(subBlockRow[1])
+                # print str(i)
+
+                self.clusters.append(memoryBlock)
+            i += 1
+
+            # print str(len(self.clusters))
+
+
     def readNetsWireLength(self, filename, hrows, frows):
         print (str("Reading wire length nets file: " + filename))
         with open(filename, 'r') as f:
@@ -198,9 +311,12 @@ class Graph():
 
             net = Net(netDataRow[0], i)
             net.setPinAmount(int(netDataRow[1]))
-            net.setWL(int(float(netDataRow[2])))
+            net.setWL(int(float(netDataRow[2])) + 1)    # + 1 here to make sure 
+                                                        #we don't use a net with WL = 0
             self.nets.append(net)
-            printProgression(i, len(lines))
+            progression = printProgression(i, len(lines))
+            if progression != "":
+                print progression
 
 
     def readNets(self, filename, hrows, frows):
@@ -238,10 +354,12 @@ class Graph():
                 netID += 1
             i += 1
 
-            printProgression(i, len(lines))
+            progression = printProgression(i, len(lines))
+            if progression != "":
+                print progression
 
     
-    def findHyperedges(self, simpleGraph):
+    def findHyperedges(self):
         print "Building hyperedges"
 
 
@@ -253,53 +371,70 @@ class Graph():
         #             if net.searchInstance(clusterInstance):
         #                 for 
 
+        threads = []
+
+        for i in xrange(0, THREADS):
+            thread = myThread(i, self, i * len(self.nets) / THREADS, (i + 1) * len(self.nets) / THREADS)
+            thread.start()
+            threads.append(thread)
+
+        # thread1 = myThread(1, self, 0, len(self.nets)/2)
+        # threads.append(thread1)
+        # thread2 = myThread(2, self, len(self.nets)/2 + 1, len(self.nets))
+        # threads.append(thread2)
+        # thread1.start()
+        # thread2.start()
+
+        for i, thread in enumerate(threads):
+            print "waiting for thread " + str(i) + " to be over"
+            thread.join()
 
 
 
 
-        for i, net in enumerate(self.nets):
-            connectedClusters = list()
+        # for i, net in enumerate(self.nets):
+        #     connectedClusters = list()
 
-            # Now, for each net, we get its list of instances.
-            for netInstance in net.instances: # netInstance are Instance object.
+        #     # Now, for each net, we get its list of instances.
+        #     for netInstance in net.instances: # netInstance are Instance object.
 
-                # And for each instance in the net, we check to which cluster
-                # that particular instance belongs.
-                for cluster in self.clusters:
+        #         # And for each instance in the net, we check to which cluster
+        #         # that particular instance belongs.
+        #         for cluster in self.clusters:
 
-                    # Try to find the instance from the net in the cluster
-                    if cluster.searchInstance(netInstance):
-                        # If found, see if the cluster has already been added
-                        # to connectedClusters.
-                        j = 0
-                        clusterFound = False
-                        while j < len(connectedClusters) and not clusterFound:
-                            if connectedClusters[j].ID == cluster.ID:
-                                clusterFound = True
-                            else:
-                                j += 1
-                        if not clusterFound:
-                            connectedClusters.append(cluster)
+        #             # Try to find the instance from the net in the cluster
+        #             if cluster.searchInstance(netInstance):
+        #                 # If found, see if the cluster has already been added
+        #                 # to connectedClusters.
+        #                 j = 0
+        #                 clusterFound = False
+        #                 while j < len(connectedClusters) and not clusterFound:
+        #                     if connectedClusters[j].ID == cluster.ID:
+        #                         clusterFound = True
+        #                     else:
+        #                         j += 1
+        #                 if not clusterFound:
+        #                     connectedClusters.append(cluster)
 
-            # Append the list A of connected clusters to the list B of hyperedges
-            # only if there are more than one cluster in list A.
-            if len(connectedClusters) > 1:
-                if simpleGraph:
-                    for i in xrange(0,len(connectedClusters)):
-                        for j in xrange(i + 1, len(connectedClusters)):
-                            hyperedge = Hyperedge()
-                            hyperedge.addCluster(connectedClusters[i])
-                            hyperedge.addCluster(connectedClusters[j])
-                            hyperedge.addNet(net)
-                            self.hyperedges.append(hyperedge)
-                else:
-                    hyperedge = Hyperedge()
-                    for cluster in connectedClusters:
-                        hyperedge.addCluster(cluster)
-                    hyperedge.addNet(net)
-                    self.hyperedges.append(hyperedge)
+        #     # Append the list A of connected clusters to the list B of hyperedges
+        #     # only if there are more than one cluster in list A.
+        #     if len(connectedClusters) > 1:
+        #         if SIMPLE_GRAPH:
+        #             for i in xrange(0,len(connectedClusters)):
+        #                 for j in xrange(i + 1, len(connectedClusters)):
+        #                     hyperedge = Hyperedge()
+        #                     hyperedge.addCluster(connectedClusters[i])
+        #                     hyperedge.addCluster(connectedClusters[j])
+        #                     hyperedge.addNet(net)
+        #                     self.hyperedges.append(hyperedge)
+        #         else:
+        #             hyperedge = Hyperedge()
+        #             for cluster in connectedClusters:
+        #                 hyperedge.addCluster(cluster)
+        #             hyperedge.addNet(net)
+        #             self.hyperedges.append(hyperedge)
 
-            printProgression(i, len(self.nets))
+        #     printProgression(i, len(self.nets))
 
         s = ""
         for hyperedge in self.hyperedges:
@@ -403,7 +538,9 @@ class Graph():
             if not clusterAMerged:
                 i += 1
 
-            printProgression(i, len(self.hyperedges))
+            progression = printProgression(i, len(self.hyperedges))
+            if progression != "":
+                print progression
 
         if SIMPLE_GRAPH:
             print "Prepare simple graph"
@@ -796,7 +933,7 @@ class Graph():
     def dumpClusters(self):
         s = ""
         for cluster in self.clusters:
-            s += str(cluster.ID) + "\t" + cluster.name
+            s += str(cluster.ID) + "\t" + cluster.name + "\n"
         with open("clusters", 'w') as f:
             f.write(s)
 
@@ -1013,9 +1150,11 @@ if __name__ == "__main__":
 #    -------------------------------------------- 
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/CCX/ClusterLevel2/"]
     # dirs=["/Users/drago/Desktop/Current/test/inpt/CCX/ClusterLevel3/"]
-    dirs=["../input_files/"]
-    # dirs=["../ccx/"]
+    # dirs=["../input_files/"]
+    dirs=["../ccx/"]
     # dirs = ["../MPSoC/"]
+    # dirs = ["../spc_L3/"]
+    # dirs = ["../spc_L2/"]
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/SPC/"]
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/test/"]
 
@@ -1029,14 +1168,16 @@ if __name__ == "__main__":
         clustersInstancesFile = mydir + "ClustersInstances.out"
         netsInstances = mydir + "InstancesPerNet.out"
         netsWL = mydir + "WLnets.out"
+        memoryBlocksFile = mydir + "bb.out"
 
         graph.ReadClusters(clustersAreaFile, 14, 2)
         graph.readClustersInstances(clustersInstancesFile, 0, 0)
+        # graph.readMemoryBlocks(memoryBlocksFile, 14, 4)
         # Begin with the netWL file, as there are less nets there.
         graph.readNetsWireLength(netsWL, 14, 2)
         graph.readNets(netsInstances, 0, 0)
 
-        graph.findHyperedges(simpleGraph=SIMPLE_GRAPH)
+        graph.findHyperedges()
 
         edgeWeightType = 0
         graph.computeHyperedgeWeights(True)
