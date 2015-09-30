@@ -1073,10 +1073,8 @@ class Graph():
                 for bit in xrange(0, len(partitions[i])):
                     if partitions[i][bit] != partitions[j][bit]:
                         hammingDistance += 1
-                if hammingDistance == len(partitions[i]):
-                    table += "inv\t"
-                else:
-                    table += str(hammingDistance) + "\t"
+                # Hamming distance normalized, limited to two decimal points
+                table += str("%.2f" % (float(hammingDistance)/len(partitions[i]))) + "\t"
             table += "\n"
 
         part = 0
@@ -1257,8 +1255,8 @@ if __name__ == "__main__":
 #    -------------------------------------------- 
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/CCX/ClusterLevel2/"]
     # dirs=["/Users/drago/Desktop/Current/test/inpt/CCX/ClusterLevel3/"]
-    # dirs=["../input_files/"]
-    dirs=["../ccx/"]
+    dirs=["../input_files/"]
+    # dirs=["../ccx/"]
     # dirs = ["../MPSoC/"]
     # dirs = ["../spc_L3/"]
     # dirs = ["../spc_L2/"]
