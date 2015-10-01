@@ -321,6 +321,8 @@ class Graph():
             lines[i] = " ".join(lines[i].split())
 
         i = 0
+        existingClustersCount = len(self.clusters) # Clusters already in the list before.
+        blockCount = 0
         while i < len(lines):
             # print str(i)
             line = lines[i]
@@ -330,9 +332,9 @@ class Graph():
             #[10]: instance
             blockRow = line.split()
             # print blockRow
-            existingClustersCount = len(self.clusters) # Clusters already in the list before.
             if len(line) > 0:
-                memoryBlock = Cluster(blockRow[0], existingClustersCount + i)
+                memoryBlock = Cluster(blockRow[0], existingClustersCount + blockCount)
+                blockCount += 1
                 
                 memoryBlock.setArea(float(blockRow[6]))
                 memoryBlock.addInstance(blockRow[10])
@@ -1256,10 +1258,10 @@ if __name__ == "__main__":
 #    -------------------------------------------- 
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/CCX/ClusterLevel2/"]
     # dirs=["/Users/drago/Desktop/Current/test/inpt/CCX/ClusterLevel3/"]
-    dirs=["../input_files/"]
+    # dirs=["../input_files/"]
     # dirs=["../ccx/"]
     # dirs = ["../MPSoC/"]
-    # dirs = ["../spc_L3/"]
+    dirs = ["../spc_L3/"]
     # dirs = ["../spc_L2/"]
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/SPC/"]
 #    dirs=["/Users/drago/Desktop/Current/test/inpt/test/"]
@@ -1278,7 +1280,7 @@ if __name__ == "__main__":
 
         graph.ReadClusters(clustersAreaFile, 14, 2)
         graph.readClustersInstances(clustersInstancesFile, 0, 0)
-        # graph.readMemoryBlocks(memoryBlocksFile, 14, 4)
+        graph.readMemoryBlocks(memoryBlocksFile, 14, 4)
         # Begin with the netWL file, as there are less nets there.
         graph.readNetsWireLength(netsWL, 14, 2)
         graph.readNets(netsInstances, 0, 0)
