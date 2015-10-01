@@ -141,7 +141,7 @@ class Graph():
     def ReadClusters(self, filename, hrows, frows):
         print (str("Reading clusters file: " + filename))
         with open(filename, 'r') as f:
-            lines = f.read().splitlines()
+        lines = f.read().splitlines()
 
         # Remove the header lines
         for i in xrange(0, hrows):
@@ -171,26 +171,35 @@ class Graph():
         with open(filename, 'r') as f:
             lines = f.read().splitlines()
 
-        # Remove the header lines
-        for i in xrange(0, hrows):
-            del lines[0]
-        # Remove the footer lines
-        for i in xrange(0,frows):
-            del lines[-1]
+        if CLUSTER_INPUT_TYPE == 0:
+            # Remove the header lines
+            for i in xrange(0, hrows):
+                del lines[0]
+            # Remove the footer lines
+            for i in xrange(0,frows):
+                del lines[-1]
 
-        for line in lines:
-            line = line.strip(' \n')
-            line = line.replace('{','')
-            line = line.replace('}','')
-            # print line
-            clusterInstancesRow = line.split()
-            found, clusterID = self.findClusterByName(clusterInstancesRow[0])
-            if found:
-                del clusterInstancesRow[0]
-                for i, instanceName in enumerate(clusterInstancesRow):
-                    # instance = Instance(instanceName)
-                    # self.clusters[clusterID].addInstance(instance)
-                    self.clusters[clusterID].addInstance(instanceName)
+            for line in lines:
+                line = line.strip(' \n')
+                line = line.replace('{','')
+                line = line.replace('}','')
+                # print line
+                clusterInstancesRow = line.split()
+                found, clusterID = self.findClusterByName(clusterInstancesRow[0])
+                if found:
+                    del clusterInstancesRow[0]
+                    for i, instanceName in enumerate(clusterInstancesRow):
+                        # instance = Instance(instanceName)
+                        # self.clusters[clusterID].addInstance(instance)
+                        self.clusters[clusterID].addInstance(instanceName)
+        elif CLUSTER_INPUT_TYPE == 1:
+            for line in lines:
+                line = line.strip(' \n')
+                clusterInstancesRow = line.split()
+                found, clusterID = self.findClusterByName(clusterInstancesRow[3])
+                if found:
+                    self.clusters[clusterID].addInstance(clusterInstancesRow[2])
+
 
 
     def readMemoryBlocks(self, filename, hrows, frows):
