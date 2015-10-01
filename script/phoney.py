@@ -83,7 +83,7 @@ def buildHyperedges(processID, startIndex, endIndex, nets, clusters, pipe):
                             j += 1
                     if not clusterFound:
                         connectedClusters.append(cluster)
-
+ 
         # Append the list A of connected clusters to the list B of hyperedges
         # only if there are more than one cluster in list A.
         if len(connectedClusters) > 1:
@@ -153,7 +153,7 @@ class Graph():
         for i, line in enumerate(lines):
             line = line.strip(' \n')
             clusterDataRow = line.split()
-            cluster = Cluster(clusterDataRow[0], i)
+            cluster = Cluster(clusterDataRow[0], i, False)
             self.clusters.append(cluster)
 
             lowerBounds = clusterDataRow[3][1:-1].split(",")    # Exclude the first and last
@@ -212,7 +212,6 @@ class Graph():
         existingClustersCount = len(self.clusters) # Clusters already in the list before.
         blockCount = 0
         while i < len(lines):
-            # print str(i)
             line = lines[i]
             #[0]: block name
             #[2]: instance count
@@ -221,24 +220,24 @@ class Graph():
             blockRow = line.split()
             # print blockRow
             if len(line) > 0:
-                memoryBlock = Cluster(blockRow[0], existingClustersCount + blockCount)
+                memoryBlock = Cluster(blockRow[10], existingClustersCount + blockCount, True)
                 blockCount += 1
-                
-                memoryBlock.setArea(float(blockRow[6]))
+                moduleArea = float(blockRow[6])
+                memoryBlock.setArea(moduleArea)
                 memoryBlock.addInstance(blockRow[10])
+                self.clusters.append(memoryBlock)
 
                 for j in xrange(1, int(blockRow[2])):
                     i += 1
                     line = lines[i]
                     subBlockRow = line.split()
-                    # print subBlockRow
+                    memoryBlock = Cluster(subBlockRow[1], existingClustersCount + blockCount, True)
+                    blockCount += 1
+                    memoryBlock.setArea(moduleArea)
                     memoryBlock.addInstance(subBlockRow[1])
-                # print str(i)
+                    self.clusters.append(memoryBlock)
 
-                self.clusters.append(memoryBlock)
             i += 1
-
-            # print str(len(self.clusters))
 
 
     def readNetsWireLength(self, filename, hrows, frows):
@@ -533,8 +532,12 @@ class Graph():
             return False
         data = fIn.readlines()
         for i, cluster in enumerate(self.clusters):
-            fOut.write(str('add_to_die -cluster ' + "\t" + str(cluster.name) + \
-                "\t -die Die" + str(data[i])))
+            if cluster.blackbox:
+                fOut.write(str('add_to_die -inst ' + "\t" + str(cluster.name) + \
+                    "\t -die Die" + str(data[i])))
+            else:
+                fOut.write(str('add_to_die -cluster ' + "\t" + str(cluster.name) + \
+                    "\t -die Die" + str(data[i])))
         fOut.close()
         fIn.close()
         print "Done!"
@@ -636,7 +639,7 @@ class Net:
 
 
 class Cluster:
-    def __init__(self, name, clusterID):
+    def __init__(self, name, clusterID, blackbox):
         self.name = name
         self.ID = clusterID
         self.instances = []
@@ -651,6 +654,11 @@ class Cluster:
                                     # They are the edges connecting this cluster to others.
                                     # Those hyperedges are needed to establish weights.
                                     # connectedEdges[i] connects to conectedClusters[i]
+        self.blackbox = blackbox    # Boolean
+                                    # When a cluster is a blackbox, it's composed of only
+                                    # one instance. Hence, when writting its directive into
+                                    # the .tcl file, use the '-inst' modifier.
+                                    # e.g. Memory are blackboxes.
 
         self.weights = [0] * VERTEX_WEIGHTS_TYPES
         self.weightsNormalized = [0] * VERTEX_WEIGHTS_TYPES
