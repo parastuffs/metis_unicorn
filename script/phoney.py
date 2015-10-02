@@ -16,6 +16,7 @@ import copy
 import matplotlib.pyplot as plt
 import threading
 from multiprocessing import Process, Pipe
+import time
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
@@ -26,7 +27,7 @@ WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
 SIMPLE_GRAPH = False
 THREADS = 3
-CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
+CLUSTER_INPUT_TYPE = 1  # 0: standard .out lists
                         # 1: Ken's output
 
 def printProgression(current, max):
@@ -150,19 +151,27 @@ class Graph():
         for i in xrange(0,frows):
             del lines[-1]
 
-        for i, line in enumerate(lines):
-            line = line.strip(' \n')
-            clusterDataRow = line.split()
-            cluster = Cluster(clusterDataRow[0], i, False)
-            self.clusters.append(cluster)
+        if CLUSTER_INPUT_TYPE == 0:
+            for i, line in enumerate(lines):
+                line = line.strip(' \n')
+                clusterDataRow = line.split()
+                cluster = Cluster(clusterDataRow[0], i, False)
 
-            lowerBounds = clusterDataRow[3][1:-1].split(",")    # Exclude the first and last
-                                                                # chars: '(' and ')'.
-            upperBounds = clusterDataRow[4][1:-1].split(",")
-            self.clusters[i].setBoundaries(float(lowerBounds[0]), float(lowerBounds[1]),
-                float(upperBounds[0]), float(upperBounds[1]))
-            
-            self.clusters[i].setArea(float(clusterDataRow[5]))
+                lowerBounds = clusterDataRow[3][1:-1].split(",")    # Exclude the first and last
+                                                                    # chars: '(' and ')'.
+                upperBounds = clusterDataRow[4][1:-1].split(",")
+                cluster.setBoundaries(float(lowerBounds[0]), float(lowerBounds[1]),
+                    float(upperBounds[0]), float(upperBounds[1]))
+                
+                cluster.setArea(float(clusterDataRow[5]))
+                self.clusters.append(cluster)
+        elif CLUSTER_INPUT_TYPE == 1:
+            for i, line in enumerate(lines):
+                line = line.strip(' \n')
+                clusterDataRow = line.split()
+                cluster = Cluster(clusterDataRow[0], i, False)
+                cluster.setArea(clusterDataRow[1])
+                self.clusters.append(cluster)
 
 
     def readClustersInstances(self, filename, hrows, frows):
@@ -193,12 +202,20 @@ class Graph():
                         # self.clusters[clusterID].addInstance(instance)
                         self.clusters[clusterID].addInstance(instanceName)
         elif CLUSTER_INPUT_TYPE == 1:
-            for line in lines:
+            # line sample : add_to_cluster -inst lb/rtlc_I2820 c603
+            for i, line in enumerate(lines):
                 line = line.strip(' \n')
                 clusterInstancesRow = line.split()
                 found, clusterID = self.findClusterByName(clusterInstancesRow[3])
                 if found:
-                    self.clusters[clusterID].addInstance(clusterInstancesRow[2])
+                    foundInstance = self.clusters[clusterID].searchInstance(clusterInstancesRow[2])
+                    if not foundInstance:
+                        self.clusters[clusterID].addInstance(clusterInstancesRow[2])
+                else:
+                    print "Das ist ein Problem, cluster " + clusterInstancesRow[3] + " not found."
+                progression = printProgression(i, len(lines))
+                if progression != "":
+                    print progression
 
 
 
@@ -229,24 +246,55 @@ class Graph():
             blockRow = line.split()
             # print blockRow
             if len(line) > 0:
-                memoryBlock = Cluster(blockRow[10], existingClustersCount + blockCount, True)
-                blockCount += 1
-                moduleArea = float(blockRow[4])
-                memoryBlock.setArea(moduleArea)
-                memoryBlock.addInstance(blockRow[10])
-                self.clusters.append(memoryBlock)
-
-                for j in xrange(1, int(blockRow[2])):
-                    i += 1
-                    line = lines[i]
-                    subBlockRow = line.split()
-                    memoryBlock = Cluster(subBlockRow[1], existingClustersCount + blockCount, True)
+                if CLUSTER_INPUT_TYPE == 0:
+                    memoryBlock = Cluster(blockRow[10], existingClustersCount + blockCount, True)
                     blockCount += 1
+                    moduleArea = float(blockRow[4])
                     memoryBlock.setArea(moduleArea)
-                    memoryBlock.addInstance(subBlockRow[1])
+                    memoryBlock.addInstance(blockRow[10])
                     self.clusters.append(memoryBlock)
 
+                    for j in xrange(1, int(blockRow[2])):
+                        i += 1
+                        line = lines[i]
+                        subBlockRow = line.split()
+                        memoryBlock = Cluster(subBlockRow[1], existingClustersCount + blockCount, True)
+                        blockCount += 1
+                        memoryBlock.setArea(moduleArea)
+                        memoryBlock.addInstance(subBlockRow[1])
+                        self.clusters.append(memoryBlock)
+
+                elif CLUSTER_INPUT_TYPE == 1:
+                    moduleArea = float(blockRow[4])
+                    k = 0
+                    found = False
+                    while k < len(self.clusters) and not found:
+                        cluster = self.clusters[k]
+                        found = cluster.searchInstance(blockRow[10])
+                        if found:
+                            cluster.setArea(moduleArea)
+                            cluster.blackbox = True
+                        k += 1
+
+                    for j in xrange(1, int(blockRow[2])):
+                        i += 1
+                        line = lines[i]
+                        subBlockRow = line.split()
+                        l = 0
+                        found = False
+                        while l < len(self.clusters) and not found:
+                            cluster = self.clusters[l]
+                            found = cluster.searchInstance(subBlockRow[1])
+                            if found:
+                                cluster.setArea(moduleArea)
+                                cluster.blackbox = True
+                            l += 1
+
+
             i += 1
+            progression = printProgression(i, len(lines))
+            if progression != "":
+                print progression
 
 
     def readNetsWireLength(self, filename, hrows, frows):
@@ -814,27 +862,42 @@ if __name__ == "__main__":
 #    -------------------------------------------- 
 #    Name | Type | Area | Inst | Cnt |  Area(%) 
 #    -------------------------------------------- 
-    dirs=["../input_files/"]
+    # dirs=["../input_files/"]
     # dirs=["../ccx/"]
     # dirs = ["../MPSoC/"]
-    # dirs = ["../spc_L3/"]
+    dirs = ["../spc_L3/"]
     # dirs = ["../spc_L2/"]
 
     graph = Graph()
 #    RunCosts = [0, 1, 2]
 #    RunCosts = [3, 4, 5]
     RunCosts = [0, 1, 2, 3, 4, 5]
+    clusterCount = 500
 
     for mydir in dirs:
-        clustersAreaFile = mydir + "ClustersArea.out"
-        clustersInstancesFile = mydir + "ClustersInstances.out"
+        if CLUSTER_INPUT_TYPE == 0:
+            clustersAreaFile = mydir + "ClustersArea.out"
+            clustersInstancesFile = mydir + "ClustersInstances.out"
+        elif CLUSTER_INPUT_TYPE == 1:
+            clustersAreaFile = mydir + "test" + str(clusterCount) + ".area"
+            clustersInstancesFile = mydir + "test" + str(clusterCount) + ".tcl"
         netsInstances = mydir + "InstancesPerNet.out"
         netsWL = mydir + "WLnets.out"
         memoryBlocksFile = mydir + "bb.out"
 
-        graph.ReadClusters(clustersAreaFile, 14, 2)
+        if CLUSTER_INPUT_TYPE == 0:
+            graph.ReadClusters(clustersAreaFile, 14, 2)
+        elif CLUSTER_INPUT_TYPE == 1:
+            graph.ReadClusters(clustersAreaFile, 0, 0)
+
+        t0 = time.time()
         graph.readClustersInstances(clustersInstancesFile, 0, 0)
-        # graph.readMemoryBloc  ks(memoryBlocksFile, 14, 4)
+        t1 = time.time()
+        print "time: " + str(t1-t0)
+        t0 = time.time()
+        graph.readMemoryBlocks(memoryBlocksFile, 14, 4)
+        t1 = time.time()
+        print "time: " + str(t1-t0)
         # Begin with the netWL file, as there are less nets there.
         graph.readNetsWireLength(netsWL, 14, 2)
         graph.readNets(netsInstances, 0, 0)
