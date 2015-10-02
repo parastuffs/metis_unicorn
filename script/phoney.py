@@ -545,14 +545,29 @@ class Graph():
         except IOError as e:
             print "Can't open file"
             return False
+
+        # Find the longest cluster name first.
+        # This is necessary in order to align the 'Diex' part
+        # of the .tcl directives, allowing to apply easy column
+        # edits later on.
+        maxLength = 0
+        for cluster in self.clusters:
+            if len(cluster.name) > maxLength:
+                maxLength = len(cluster.name)
+
+
         data = fIn.readlines()
+        s = ""
         for i, cluster in enumerate(self.clusters):
             if cluster.blackbox:
-                fOut.write(str('add_to_die -inst ' + "\t" + str(cluster.name) + \
-                    "\t -die Die" + str(data[i])))
+                s = "add_to_die -inst    " + str(cluster.name) + \
+                    " " * (maxLength - len(cluster.name)) + \
+                    " -die Die" + str(data[i])
             else:
-                fOut.write(str('add_to_die -cluster ' + "\t" + str(cluster.name) + \
-                    "\t -die Die" + str(data[i])))
+                s = "add_to_die -cluster " + str(cluster.name) + \
+                    " " * (maxLength - len(cluster.name)) + \
+                    " -die Die" + str(data[i])
+            fOut.write(s)
         fOut.close()
         fIn.close()
         print "Done!"
