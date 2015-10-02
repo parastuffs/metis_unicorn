@@ -141,7 +141,7 @@ class Graph():
     def ReadClusters(self, filename, hrows, frows):
         print (str("Reading clusters file: " + filename))
         with open(filename, 'r') as f:
-        lines = f.read().splitlines()
+            lines = f.read().splitlines()
 
         # Remove the header lines
         for i in xrange(0, hrows):
@@ -523,19 +523,17 @@ class Graph():
         if SIMPLE_GRAPH:
             command = METIS_PATH + "gpmetis " + filename + " 2 -dbglvl=0"
         else:
-            command = HMETIS_PATH + "hmetis " + filename + " 2 5 20 1 1 1 0 8"
+            command = HMETIS_PATH + "hmetis " + filename + " 2 1 20 1 1 1 0 8"
             print "Calling '" + command + "'"
         # call([HMETIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
         call(command.split())
     
-    def WritePartitionDirectives(self, metisFile):
+    def WritePartitionDirectives(self, metisFileIn, metisFileOut):
         # print "--------------------------------------------------->"
-        print "Write tcl file for file: ", metisFile
-        filenameOut = metisFile + ".tcl"
-        filenameIn = metisFile + ".part.2"
+        print "Write tcl file for file: ", metisFileIn
         try:
-            fOut = open(filenameOut, "w")
-            fIn = open(filenameIn, "r")
+            fOut = open(metisFileOut, "w")
+            fIn = open(metisFileIn, "r")
         except IOError as e:
             print "Can't open file"
             return False
@@ -614,6 +612,26 @@ class Graph():
         for i in xrange(0, EDGE_WEIGHTS_TYPES):
             plt.plot(weights[i], styles[i])
         plt.show()
+
+
+    def computePartitionArea(self, filename):
+        with open(filename, 'r') as f:
+            lines = f.read().splitlines()
+
+        for i in xrange(0, len(lines)):
+            lines[i] = " ".join(lines[i].split())
+
+        partitionsArea = [0] * 2
+
+        for line in lines:
+            lineData = line.split()
+            found, index = self.findClusterByName(lineData[2])
+            if lineData[4] == "Die0":
+                partitionsArea[0] += self.clusters[index].area
+            elif lineData[4] == "Die1":
+                partitionsArea[1] += self.clusters[index].area
+
+        print partitionsArea
               
 
 
@@ -773,10 +791,10 @@ if __name__ == "__main__":
 #    -------------------------------------------- 
 #    Name | Type | Area | Inst | Cnt |  Area(%) 
 #    -------------------------------------------- 
-    # dirs=["../input_files/"]
+    dirs=["../input_files/"]
     # dirs=["../ccx/"]
     # dirs = ["../MPSoC/"]
-    dirs = ["../spc_L3/"]
+    # dirs = ["../spc_L3/"]
     # dirs = ["../spc_L2/"]
 
     graph = Graph()
@@ -793,7 +811,7 @@ if __name__ == "__main__":
 
         graph.ReadClusters(clustersAreaFile, 14, 2)
         graph.readClustersInstances(clustersInstancesFile, 0, 0)
-        graph.readMemoryBlocks(memoryBlocksFile, 14, 4)
+        # graph.readMemoryBloc  ks(memoryBlocksFile, 14, 4)
         # Begin with the netWL file, as there are less nets there.
         graph.readNetsWireLength(netsWL, 14, 2)
         graph.readNets(netsInstances, 0, 0)
@@ -844,8 +862,11 @@ if __name__ == "__main__":
                 metisInput += ".hgr"
                 graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                 graph.GraphPartition(metisInput)
-                graph.WritePartitionDirectives(metisInput)
-                paritionFiles.append(str(metisInput + ".part.2"))
+                metisPartitionFile = metisInput + ".part.2"
+                partitionDirectivesFile = metisInput + ".tcl"
+                graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile)
+                graph.computePartitionArea(partitionDirectivesFile)
+                paritionFiles.append(metisPartitionFile)
         graph.dumpClusters()
         graph.hammingReport(paritionFiles)
         # graph.plotWeights()
