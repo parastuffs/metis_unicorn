@@ -20,7 +20,7 @@ from multiprocessing import Process, Pipe
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
-EDGE_WEIGHTS_TYPES = 7
+EDGE_WEIGHTS_TYPES = 10
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
@@ -224,14 +224,14 @@ class Graph():
             line = lines[i]
             #[0]: block name
             #[2]: instance count
-            #[6]: total area
+            #[4]: physical area
             #[10]: instance
             blockRow = line.split()
             # print blockRow
             if len(line) > 0:
                 memoryBlock = Cluster(blockRow[10], existingClustersCount + blockCount, True)
                 blockCount += 1
-                moduleArea = float(blockRow[6])
+                moduleArea = float(blockRow[4])
                 memoryBlock.setArea(moduleArea)
                 memoryBlock.addInstance(blockRow[10])
                 self.clusters.append(memoryBlock)
@@ -452,31 +452,39 @@ class Graph():
                     # Number of wires
                     weight = hyperedge.connectivity
                 elif weightType == 1:
-                    # Wire length
+                    # 1/#wires
+                    weight = 1.0 / hyperedge.weights[0]
+                elif weightType == 2:
+                    # Total wire length
+                    for net in hyperedge.nets:
+                        weight += net.wl
+                elif weightType == 3:
+                    # 1/Total wire length
+                    weight = 1.0 / hyperedge.weights[2]
+                elif weightType == 4:
+                    # Average wire length
                     wlTot = 0
                     for net in hyperedge.nets:
                         wlTot += net.wl
                     wlAvg = wlTot / len(hyperedge.nets)
                     weight = wlAvg
-                elif weightType == 2:
-                    # 1/#wires
-                    weight = 1.0 / hyperedge.weights[0]
-                elif weightType == 3:
-                    # 1/Wire length
-                    weight = 1.0 / hyperedge.weights[1]
-                elif weightType == 4:
-                    # wire length and number of wires
+                elif weightType == 5:
+                    # 1/Average wire length
+                    weight = 1.0 / hyperedge.weights[4]
+                elif weightType == 6:
+                    # Number of wires * total length
+                    weight = hyperedge.weights[0] * hyperedge.weights[2]
+                elif weightType == 7:
+                    weight = 1.0 / hyperedge.weights[6]
+                elif weightType == 8:
+                    # total wire length and number of wires
                     weight = \
                         WEIGHT_COMBILI_COEF * hyperedge.weightsNormalized[0] + \
                         (1 - WEIGHT_COMBILI_COEF) * hyperedge.weightsNormalized[1]
-                elif weightType == 5:
-                    # 1 / (wire length and number of wires)
-                    weight = 1.0 / ( \
-                        WEIGHT_COMBILI_COEF * hyperedge.weightsNormalized[0] + \
-                        (1 - WEIGHT_COMBILI_COEF) * hyperedge.weightsNormalized[1] )
-                elif weightType == 6:
-                    # Constant
-                    weight = 1
+                elif weightType == 9:
+                    # 1 / total wire length and number of wires
+                    weight = 1 / hyperedge.weights[8]
+
 
                 hyperedge.setWeight(weightType, weight)
                 # Save the max
@@ -826,39 +834,47 @@ if __name__ == "__main__":
 
         for edgeWeightType in xrange(0, EDGE_WEIGHTS_TYPES):
             for vertexWeightType in xrange(0, VERTEX_WEIGHTS_TYPES):
-                metisInput = "input"
-                print "================================================="
+                metisInput = "metis"
+                print "============================================================="
                 if edgeWeightType == 0:
-                    print "> Edge weight: # wires"
-                    metisInput += "_wires"
-                elif edgeWeightType == 1:
-                    print "> Edge weight: wire length"
-                    metisInput += "_wire-length"
-                elif edgeWeightType == 2:
-                    print "> Edge weight: 1 / # wires"
-                    metisInput += "_1-over-wires"
-                elif edgeWeightType == 3:
-                    print "> Edge weight: 1 / wire length"
-                    metisInput += "_1-over-wire-length"
-                elif edgeWeightType == 4:
-                    print "> Edge weight: " + str(WEIGHT_COMBILI_COEF) + " * # wires + " + \
-                        str(1 - WEIGHT_COMBILI_COEF) + " * wire length"
-                    metisInput += "_wires-wire-length"
-                elif edgeWeightType == 5:
-                    print "> Edge weight: 1 / " + str(WEIGHT_COMBILI_COEF) + " * # wires + " + \
-                        str(1 - WEIGHT_COMBILI_COEF) + " * wire length"
-                    metisInput += "_1-over-wires-wire-length"
-                elif edgeWeightType == 6:
-                    print "> Edge weight: 1 (constant)"
-                    metisInput += "_1-constant"
+                    print "> Edge weight: number of wires"
+                    metisInput += "_01_NoWires"
+                if edgeWeightType == 1:
+                    print "> Edge weight: 1 / number of wires"
+                    metisInput += "_02_1-NoWires"
+                if edgeWeightType == 2:
+                    print "> Edge weight: total wire length"
+                    metisInput += "_03_TotLength"
+                if edgeWeightType == 3:
+                    print "> Edge weight: 1 / total wire length"
+                    metisInput += "_04_1-TotLength"
+                if edgeWeightType == 4:
+                    print "> Edge weight: average wire length"
+                    metisInput += "_05_AvgLength"
+                if edgeWeightType == 5:
+                    print "> Edge weight: 1 / average wire length"
+                    metisInput += "_06_1-AvgLength"
+                if edgeWeightType == 6:
+                    print "> Edge weight: number of wire * total wire length"
+                    metisInput += "_07_NoWiresXTotLength"
+                if edgeWeightType == 7:
+                    print "> Edge weight: 1 / number of wire * total wire length"
+                    metisInput += "_08_1-NoWiresXTotLength"
+                if edgeWeightType == 8:
+                    print "> Edge weight: " + str(WEIGHT_COMBILI_COEF) + \
+                        " number of wire * " + \
+                        str(1 - WEIGHT_COMBILI_COEF) + " total wire length"
+                    metisInput += "_09_NoWires+TotLength"
+                if edgeWeightType == 9:
+                    print "> Edge weight: 1 / " + str(WEIGHT_COMBILI_COEF) + \
+                        " number of wire * " + \
+                        str(1 - WEIGHT_COMBILI_COEF) + " total wire length"
+                    metisInput += "_10_1-NoWires+TotLength"
 
                 if vertexWeightType == 0:
                     print "> Vertex weight: cluster area"
-                    metisInput += "_area"
-                elif vertexWeightType == 1:
-                    print "> Vertex weight: constant 1"
-                    metisInput += "_constant"
-                print "================================================="
+                    metisInput += "_Area"
+                print "============================================================="
                 metisInput += ".hgr"
                 graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                 graph.GraphPartition(metisInput)
