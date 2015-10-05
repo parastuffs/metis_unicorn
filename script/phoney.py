@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import threading
 from multiprocessing import Process, Pipe
 import time
+import pickle
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
@@ -25,10 +26,16 @@ EDGE_WEIGHTS_TYPES = 10
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
-SIMPLE_GRAPH = False
-THREADS = 3
-CLUSTER_INPUT_TYPE = 1  # 0: standard .out lists
+SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
+                        # True: standard graph, using gpmetis
+THREADS = 3     # Amount of parallel process to use when building the hypergraph.
+CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
+                        # 2: Custom clustering, no boundaries
+MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
+IMPORT_HYPERGRAPH = True    # True: import the hypergraph from a previous dump,
+                            # skip the graph building directly to the partitioning.
+DUMP_FILE = 'hypergraph.dump'
 
 def printProgression(current, max):
     progression = ""
@@ -171,6 +178,14 @@ class Graph():
                 clusterDataRow = line.split()
                 cluster = Cluster(clusterDataRow[0], i, False)
                 cluster.setArea(clusterDataRow[1])
+                self.clusters.append(cluster)
+        elif CLUSTER_INPUT_TYPE == 2:
+            for i, line in enumerate(lines):
+                line = line.strip(' \n')
+                clusterDataRow = line.split()
+                cluster = Cluster(clusterDataRow[0], i, False)
+                
+                cluster.setArea(float(clusterDataRow[4]))
                 self.clusters.append(cluster)
 
 
@@ -863,46 +878,69 @@ if __name__ == "__main__":
 #    Name | Type | Area | Inst | Cnt |  Area(%) 
 #    -------------------------------------------- 
     # dirs=["../input_files/"]
-    # dirs=["../ccx/"]
+    dirs=["../ccx/"]
+    # dirs=["../CCX_HL1/"]
+    # dirs=["../CCX_HL2/"]
+    # dirs=["../CCX_HL3/"]
+    # dirs=["../CCX_HL4/"]
     # dirs = ["../MPSoC/"]
-    dirs = ["../spc_L3/"]
-    # dirs = ["../spc_L2/"]
+    # dirs = ["../spc_L3/"]
+    # dirs = ["../spc_HL1/"]
+    # dirs = ["../spc_HL2/"]
+    # dirs = ["../CCX_Auto0500/"]
+    # dirs = ["../CCX_Auto1000/"]
 
     graph = Graph()
-#    RunCosts = [0, 1, 2]
-#    RunCosts = [3, 4, 5]
-    RunCosts = [0, 1, 2, 3, 4, 5]
     clusterCount = 500
 
     for mydir in dirs:
-        if CLUSTER_INPUT_TYPE == 0:
-            clustersAreaFile = mydir + "ClustersArea.out"
-            clustersInstancesFile = mydir + "ClustersInstances.out"
-        elif CLUSTER_INPUT_TYPE == 1:
-            clustersAreaFile = mydir + "test" + str(clusterCount) + ".area"
-            clustersInstancesFile = mydir + "test" + str(clusterCount) + ".tcl"
-        netsInstances = mydir + "InstancesPerNet.out"
-        netsWL = mydir + "WLnets.out"
-        memoryBlocksFile = mydir + "bb.out"
 
-        if CLUSTER_INPUT_TYPE == 0:
-            graph.ReadClusters(clustersAreaFile, 14, 2)
-        elif CLUSTER_INPUT_TYPE == 1:
-            graph.ReadClusters(clustersAreaFile, 0, 0)
+        if not IMPORT_HYPERGRAPH:
+            if CLUSTER_INPUT_TYPE == 0:
+                clustersAreaFile = mydir + "ClustersArea.out"
+                clustersInstancesFile = mydir + "ClustersInstances.out"
+            elif CLUSTER_INPUT_TYPE == 1:
+                clustersAreaFile = mydir + "test" + str(clusterCount) + ".area"
+                clustersInstancesFile = mydir + "test" + str(clusterCount) + ".tcl"
+            elif CLUSTER_INPUT_TYPE == 2:
+                clustersAreaFile = mydir + "2rpt.clusters.rpt"
+                clustersInstancesFile = mydir + "ClustersInstances.out"
 
-        t0 = time.time()
-        graph.readClustersInstances(clustersInstancesFile, 0, 0)
-        t1 = time.time()
-        print "time: " + str(t1-t0)
-        t0 = time.time()
-        graph.readMemoryBlocks(memoryBlocksFile, 14, 4)
-        t1 = time.time()
-        print "time: " + str(t1-t0)
-        # Begin with the netWL file, as there are less nets there.
-        graph.readNetsWireLength(netsWL, 14, 2)
-        graph.readNets(netsInstances, 0, 0)
+            netsInstances = mydir + "InstancesPerNet.out"
+            netsWL = mydir + "WLnets.out"
+            memoryBlocksFile = mydir + "bb.out"
 
-        graph.findHyperedges()
+            if CLUSTER_INPUT_TYPE == 0:
+                graph.ReadClusters(clustersAreaFile, 14, 2)
+            elif CLUSTER_INPUT_TYPE == 1:
+                graph.ReadClusters(clustersAreaFile, 0, 0)
+
+            t0 = time.time()
+            graph.readClustersInstances(clustersInstancesFile, 0, 0)
+            t1 = time.time()
+            print "time: " + str(t1-t0)
+            if MEMORY_BLOCKS:
+                t0 = time.time()
+                graph.readMemoryBlocks(memoryBlocksFile, 14, 4)
+                t1 = time.time()
+                print "time: " + str(t1-t0)
+            # Begin with the netWL file, as there are less nets there.
+            graph.readNetsWireLength(netsWL, 14, 2)
+            graph.readNets(netsInstances, 0, 0)
+
+            t0 = time.time()
+            graph.findHyperedges()
+            t1 = time.time()
+            print "time: " + str(t1-t0)
+
+            print "Dumping the graph into " + mydir + DUMP_FILE
+            with open(mydir + DUMP_FILE, 'wb') as f:
+                pickle.dump(graph, f)
+
+        else:
+            print "Loading the graph from " + mydir + DUMP_FILE
+            with open(mydir + DUMP_FILE, 'rb') as f:
+                graph = pickle.load(f)
 
         edgeWeightType = 0
         graph.computeHyperedgeWeights(True)
@@ -912,7 +950,7 @@ if __name__ == "__main__":
 
         for edgeWeightType in xrange(0, EDGE_WEIGHTS_TYPES):
             for vertexWeightType in xrange(0, VERTEX_WEIGHTS_TYPES):
-                metisInput = "metis"
+                metisInput = mydir + "metis"
                 print "============================================================="
                 if edgeWeightType == 0:
                     print "> Edge weight: number of wires"
