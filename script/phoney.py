@@ -2,6 +2,9 @@
 PHONEY [Pronounce 'poney'], Partitioning of Hypergraph Obviously Not EasY
 
 Want to use it? Then check the 'HMETIS_PATH' and 'dirs' variables.
+
+Note: It is very important at the moment that the clusters have the same ID as their
+position in the Graph.clusters list.
 """
 
 """
@@ -23,19 +26,20 @@ global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
 EDGE_WEIGHTS_TYPES = 10
-VERTEX_WEIGHTS_TYPES = 1
+VERTEX_WEIGHTS_TYPES = 2
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
-SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
+SIMPLE_GRAPH = True    # False: hypergraph, using hmetis
                         # True: standard graph, using gpmetis
 THREADS = 3     # Amount of parallel process to use when building the hypergraph.
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
                         # 2: Custom clustering, no boundaries
 MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
-IMPORT_HYPERGRAPH = True    # True: import the hypergraph from a previous dump,
+IMPORT_HYPERGRAPH = False    # True: import the hypergraph from a previous dump,
                             # skip the graph building directly to the partitioning.
-DUMP_FILE = 'hypergraph.dump'
+# DUMP_FILE = 'hypergraph.dump'
+DUMP_FILE = 'simplegraph.dump'
 
 def printProgression(current, max):
     progression = ""
@@ -96,11 +100,11 @@ def buildHyperedges(processID, startIndex, endIndex, nets, clusters, pipe):
         # only if there are more than one cluster in list A.
         if len(connectedClusters) > 1:
             if SIMPLE_GRAPH:
-                for i in xrange(0,len(connectedClusters)):
-                    for j in xrange(i + 1, len(connectedClusters)):
+                for k in xrange(0,len(connectedClusters)):
+                    for l in xrange(k + 1, len(connectedClusters)):
                         hyperedge = Hyperedge()
-                        hyperedge.addCluster(connectedClusters[i])
-                        hyperedge.addCluster(connectedClusters[j])
+                        hyperedge.addCluster(connectedClusters[k])
+                        hyperedge.addCluster(connectedClusters[l])
                         hyperedge.addNet(net)
                         hyperedges.append(hyperedge)
             else:
@@ -468,12 +472,19 @@ class Graph():
 
         if SIMPLE_GRAPH:
             print "Prepare simple graph"
+            # print self.clusters
             for i, hyperedge in enumerate(self.hyperedges):
                 for k, clusterA in enumerate(hyperedge.clusters):
+                    # Due to the fact that the hhyperedges come from another thread,
+                    # the objects in hyperedge.clusters and self.clusters do not point
+                    # to the same element anymore.
+                    clusterA = self.clusters[clusterA.ID]
                     for l, clusterB in enumerate(hyperedge.clusters):
+                        clusterB = self.clusters[clusterB.ID]
                         if l != k:
                             clusterA.connectedClusters.append(clusterB)
                             clusterA.connectedEdges.append(hyperedge)
+                    # print len(clusterA.connectedClusters)
 
 
 
@@ -484,8 +495,13 @@ class Graph():
         if SIMPLE_GRAPH:
             s = str(len(self.clusters)) + " " + str(len(self.hyperedges)) + " 011"
 
+            if VERTEX_WEIGHTS_TYPES > 1:
+                s += " " + str(VERTEX_WEIGHTS_TYPES)
+
             for i, cluster in enumerate(self.clusters):
-                s += "\n" + str(cluster.weightsNormalized[vertexWeightType])
+                s += "\n"
+                for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+                    s += str(cluster.weightsNormalized[weightType]) + " "
                 for j in xrange(0, len(cluster.connectedClusters)):
                     s += " " + str(cluster.connectedClusters[j].ID + 1) + \
                         " " + str(cluster.connectedEdges[j].weightsNormalized[edgeWeightType])
@@ -561,26 +577,84 @@ class Graph():
 
 
 
+    def findSmallestCluster(self, clusters):
+        smallest = clusters[0].area
+        smallestID = 0
+        for i, cluster in enumerate(clusters):
+            if cluster.area < smallest:
+                smallest = cluster.area
+                smallestID = i
+
+        return smallestID
+
     def computeVertexWeights(self):
         print "Generating weights of vertex."
         self.clusterWeightsMax = [0] * VERTEX_WEIGHTS_TYPES
 
-        for cluster in self.clusters:
-            for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
-                if weightType == 0:
+        for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+            if weightType == 0:
+                for cluster in self.clusters:
                     weight = cluster.area
-                elif weightType == 1:
-                    weight = 1
 
-                if weight > self.clusterWeightsMax[weightType]:
-                    self.clusterWeightsMax[weightType] = weight
+                    if weight > self.clusterWeightsMax[weightType]:
+                        self.clusterWeightsMax[weightType] = weight
 
-                cluster.setWeight(weightType, weight)
+                    cluster.setWeight(weightType, weight)
+                    # print str(weight)
+
+
+            elif weightType == 1:
+                totalArea = 0
+                powerDensities = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.08, 0.05, 0.05]
+                self.clusterWeightsMax[weightType] = powerDensities[0]
+                availableClusters = [] # Clusters not yet assigned a power density
+
+                # Compute the total area and populate availableClusters
+                for cluster in self.clusters:
+                    totalArea += cluster.area
+                    availableClusters.append(cluster)
+                print "Total area: " + str(totalArea)
+
+                # Bin packing
+                for powerDensity in powerDensities:
+                    selectedClusters = [] # Clusters selected for the current density
+                    selectedArea = 0
+                    # First swoop
+                    for i, cluster in enumerate(availableClusters):
+                        # print "Enter the first loop"
+                        # print availableClusters
+                        if selectedArea + cluster.area <= totalArea / len(powerDensities):
+                            selectedArea += cluster.area
+                            selectedClusters.append(cluster)
+                            # print "Delete " + str(availableClusters[i])
+                            del availableClusters[i]
+                    while selectedArea < totalArea / len(powerDensities) and len(availableClusters) > 0:
+                        # Add the smallest area available.
+                        # print "Second loop"
+                        # print availableClusters
+                        clusterID = self.findSmallestCluster(availableClusters)
+                        selectedArea += self.clusters[availableClusters[clusterID].ID].area
+                        selectedClusters.append(self.clusters[availableClusters[clusterID].ID])
+                        # print "Delete second loop " + str(availableClusters[clusterID])
+                        del availableClusters[clusterID]
+                    # set weights
+                    for cluster in selectedClusters:
+                        print "Density " + str(powerDensity) + ", area: " + str(selectedArea)
+                        print "Cluster: " + str(cluster.ID)
+                        cluster.setWeight(weightType, powerDensity)
+
+                # for cluster in self.clusters:
+                #     print cluster.weights[weightType]
+
+
+
+
 
         for cluster in self.clusters:
             for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
                 weight = ((cluster.weights[weightType] * MAX_WEIGHT) / self.clusterWeightsMax[weightType]) + 1
                 cluster.setWeightNormalized(weightType, int(weight))
+            print cluster.weightsNormalized
 
 
 
@@ -590,11 +664,21 @@ class Graph():
         print "Running hmetis with " + filename
         # call(["/Users/drago/bin/hmetis-1.5-osx-i686/hmetis",filename,"2","5","20","1","1","1","0","0"])
         # hmetis graphFile Nparts UBfactor Nruns Ctype Rtype Vcycle Reconst dbglvl
+        Nparts = 2
+        UBfactor = 1
+        Nruns = 20
+        Ctype = 1
+        Rtype = 1
+        Vcycle = 1
+        Reconst = 0
+        dbglvl = 8
         command = ""
         if SIMPLE_GRAPH:
             command = METIS_PATH + "gpmetis " + filename + " 2 -dbglvl=0"
         else:
-            command = HMETIS_PATH + "hmetis " + filename + " 2 1 20 1 1 1 0 8"
+            command = HMETIS_PATH + "hmetis " + filename + " " + str(Nparts) + \
+                " " + str(UBfactor) + " " + str(Nruns) + " " + str(Ctype) + " " + \
+                str(Rtype) + " " + str(Vcycle) + " " + str(Reconst) + " " + str(dbglvl)
             print "Calling '" + command + "'"
         # call([HMETIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
         call(command.split())
@@ -776,6 +860,7 @@ class Cluster:
         self.weights = [0] * VERTEX_WEIGHTS_TYPES
         self.weightsNormalized = [0] * VERTEX_WEIGHTS_TYPES
 
+
     def setBoundaries(self, lowerX, lowerY, upperX, upperY):
         self.boudndaries[0][0] = lowerX
         self.boudndaries[0][1] = lowerY
@@ -889,6 +974,10 @@ if __name__ == "__main__":
     # dirs = ["../spc_HL2/"]
     # dirs = ["../CCX_Auto0500/"]
     # dirs = ["../CCX_Auto1000/"]
+    # dirs = ["../RTX/RTX_HL3/"]
+    # dirs = ["../RTX/RTX_HL2/"]
+    # dirs = ["../RTX/RTX_A0500/"]
+    # dirs = ["../RTX/RTX_A1000/"]
 
     graph = Graph()
     clusterCount = 500
@@ -908,7 +997,8 @@ if __name__ == "__main__":
 
             netsInstances = mydir + "InstancesPerNet.out"
             netsWL = mydir + "WLnets.out"
-            memoryBlocksFile = mydir + "bb.out"
+            # memoryBlocksFile = mydir + "bb.out"
+            memoryBlocksFile = mydir + "1.bb.rpt"
 
             if CLUSTER_INPUT_TYPE == 0:
                 graph.ReadClusters(clustersAreaFile, 14, 2)
@@ -990,6 +1080,9 @@ if __name__ == "__main__":
                 if vertexWeightType == 0:
                     print "> Vertex weight: cluster area"
                     metisInput += "_Area"
+                elif vertexWeightType == 1:
+                    print "> Vertex weight: cluster density power"
+                    metisInput += "_Power"
                 print "============================================================="
                 metisInput += ".hgr"
                 graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
