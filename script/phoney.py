@@ -29,17 +29,19 @@ EDGE_WEIGHTS_TYPES = 10
 VERTEX_WEIGHTS_TYPES = 2
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
-SIMPLE_GRAPH = True    # False: hypergraph, using hmetis
+SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
                         # True: standard graph, using gpmetis
 THREADS = 3     # Amount of parallel process to use when building the hypergraph.
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
                         # 2: Custom clustering, no boundaries
-MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
-IMPORT_HYPERGRAPH = False    # True: import the hypergraph from a previous dump,
+MEMORY_BLOCKS = True   # True if there are memory blocks (bb.out)
+IMPORT_HYPERGRAPH = True    # True: import the hypergraph from a previous dump,
                             # skip the graph building directly to the partitioning.
-# DUMP_FILE = 'hypergraph.dump'
-DUMP_FILE = 'simplegraph.dump'
+DUMP_FILE = 'hypergraph.dump'
+# DUMP_FILE = 'simplegraph.dump'
+
+POWER_DENSITIES = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.08, 0.05, 0.05]
 
 def printProgression(current, max):
     progression = ""
@@ -605,8 +607,7 @@ class Graph():
 
             elif weightType == 1:
                 totalArea = 0
-                powerDensities = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.08, 0.05, 0.05]
-                self.clusterWeightsMax[weightType] = powerDensities[0]
+                self.clusterWeightsMax[weightType] = POWER_DENSITIES[0]
                 availableClusters = [] # Clusters not yet assigned a power density
 
                 # Compute the total area and populate availableClusters
@@ -616,19 +617,19 @@ class Graph():
                 print "Total area: " + str(totalArea)
 
                 # Bin packing
-                for powerDensity in powerDensities:
+                for powerDensity in POWER_DENSITIES:
                     selectedClusters = [] # Clusters selected for the current density
                     selectedArea = 0
                     # First swoop
                     for i, cluster in enumerate(availableClusters):
                         # print "Enter the first loop"
                         # print availableClusters
-                        if selectedArea + cluster.area <= totalArea / len(powerDensities):
+                        if selectedArea + cluster.area <= totalArea / len(POWER_DENSITIES):
                             selectedArea += cluster.area
                             selectedClusters.append(cluster)
                             # print "Delete " + str(availableClusters[i])
                             del availableClusters[i]
-                    while selectedArea < totalArea / len(powerDensities) and len(availableClusters) > 0:
+                    while selectedArea < totalArea / len(POWER_DENSITIES) and len(availableClusters) > 0:
                         # Add the smallest area available.
                         # print "Second loop"
                         # print availableClusters
@@ -802,7 +803,42 @@ class Graph():
                 partitionsArea[1] += self.clusters[index].area
 
         print partitionsArea
-              
+
+
+    def computePartitionPower(self, filename):
+        with open(filename, 'r') as f:
+            lines = f.read().splitlines()
+
+        partitionsArea = [0] * 2
+        partitionsPower = [0] * 2
+        for i in xrange(0, 2):
+            partitionsPower[i] = [0] * len(POWER_DENSITIES)
+        # for partitionPower in partitionsPower:
+        #     # print type(partitionPower)
+        #     partitionPower = [0] * len(POWER_DENSITIES)
+        #     # print type(partitionPower)
+
+        for line in lines:
+            lineData = line.split()
+            found, index = self.findClusterByName(lineData[2])
+            if lineData[4] == "Die0":
+                partitionsArea[0] += self.clusters[index].area
+            elif lineData[4] == "Die1":
+                partitionsArea[1] += self.clusters[index].area
+
+        for line in lines:
+            lineData = line.split()
+            found, index = self.findClusterByName(lineData[2])
+            partitionIndex = int(lineData[4][3]) # Fourth character of 'DieX'
+            powerIndex = POWER_DENSITIES.index(self.clusters[index].weights[1])
+            # print partitionsPower
+            # print partitionsPower[0]
+            partitionsPower[partitionIndex][powerIndex] += self.clusters[index].area / partitionsArea[partitionIndex]
+
+        for partition in partitionsPower:
+            print partition
+
+        
 
 
 
@@ -963,7 +999,7 @@ if __name__ == "__main__":
 #    Name | Type | Area | Inst | Cnt |  Area(%) 
 #    -------------------------------------------- 
     # dirs=["../input_files/"]
-    dirs=["../ccx/"]
+    # dirs=["../ccx/"]
     # dirs=["../CCX_HL1/"]
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
@@ -972,6 +1008,7 @@ if __name__ == "__main__":
     # dirs = ["../spc_L3/"]
     # dirs = ["../spc_HL1/"]
     # dirs = ["../spc_HL2/"]
+    dirs = ["../SPC/spc_HL3/"]
     # dirs = ["../CCX_Auto0500/"]
     # dirs = ["../CCX_Auto1000/"]
     # dirs = ["../RTX/RTX_HL3/"]
@@ -997,8 +1034,8 @@ if __name__ == "__main__":
 
             netsInstances = mydir + "InstancesPerNet.out"
             netsWL = mydir + "WLnets.out"
-            # memoryBlocksFile = mydir + "bb.out"
-            memoryBlocksFile = mydir + "1.bb.rpt"
+            memoryBlocksFile = mydir + "bb.out"
+            # memoryBlocksFile = mydir + "1.bb.rpt"
 
             if CLUSTER_INPUT_TYPE == 0:
                 graph.ReadClusters(clustersAreaFile, 14, 2)
@@ -1091,6 +1128,7 @@ if __name__ == "__main__":
                 partitionDirectivesFile = metisInput + ".tcl"
                 graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile)
                 graph.computePartitionArea(partitionDirectivesFile)
+                graph.computePartitionPower(partitionDirectivesFile)
                 paritionFiles.append(metisPartitionFile)
         graph.dumpClusters()
         graph.hammingReport(paritionFiles)
