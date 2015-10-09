@@ -30,22 +30,28 @@ EDGE_WEIGHTS_TYPES = 10
 VERTEX_WEIGHTS_TYPES = 2
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
-SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
+SIMPLE_GRAPH = True    # False: hypergraph, using hmetis
                         # True: standard graph, using gpmetis
 THREADS = 3     # Amount of parallel process to use when building the hypergraph.
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
                         # 2: Custom clustering, no boundaries
 MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
-IMPORT_HYPERGRAPH = False    # True: import the hypergraph from a previous dump,
+IMPORT_HYPERGRAPH = True    # True: import the hypergraph from a previous dump,
                             # skip the graph building directly to the partitioning.
-DUMP_FILE = 'hypergraph.dump'
-# DUMP_FILE = 'simplegraph.dump'
+# DUMP_FILE = 'hypergraph.dump'
+DUMP_FILE = 'simplegraph.dump'
 
-HETEROGENEOUS_FACTOR = 8 # 
+HETEROGENEOUS_FACTOR = 5 # 
 
 RANDOM_SEED = 0 # 0: no seed, pick a new one
                 # other: use this
+
+DUMMY_CLUSTER = True # Add a dummy cluster (low area, high power)
+DUMMY_NAME = "dummy_cluster"
+POWER_ASYMMETRY = 80    # [50; 100]
+                        # At 50: symmetry
+                        # At 100: evrything in one partition
 
 POWER_DENSITIES = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.08, 0.05, 0.05]
 
@@ -483,7 +489,7 @@ class Graph():
             # print self.clusters
             for i, hyperedge in enumerate(self.hyperedges):
                 for k, clusterA in enumerate(hyperedge.clusters):
-                    # Due to the fact that the hhyperedges come from another thread,
+                    # Due to the fact that the hyperedges come from another process,
                     # the objects in hyperedge.clusters and self.clusters do not point
                     # to the same element anymore.
                     clusterA = self.clusters[clusterA.ID]
@@ -507,6 +513,7 @@ class Graph():
                 s += " " + str(VERTEX_WEIGHTS_TYPES)
 
             for i, cluster in enumerate(self.clusters):
+                # print cluster
                 s += "\n"
                 for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
                     s += str(cluster.weightsNormalized[weightType]) + " "
@@ -598,6 +605,8 @@ class Graph():
     def computeVertexWeights(self):
         print "Generating weights of vertex."
         self.clusterWeightsMax = [0] * VERTEX_WEIGHTS_TYPES
+        totalPower = 0
+        totalNormalizedPower = 0
 
         for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
             # Weight = cluster area
@@ -617,8 +626,13 @@ class Graph():
                 for cluster in self.clusters:
                     powerDensity = random.uniform(1, HETEROGENEOUS_FACTOR)
                     power = cluster.area * powerDensity
+                    print "Power density = " + str(powerDensity) + \
+                        ", area = " + str(cluster.area) + \
+                        ", power = " + str(power)
+                    totalPower += power
                     cluster.setPowerDensity(powerDensity)
                     cluster.setPower(power)
+                    cluster.setWeight(weightType, cluster.power)
 
                     if power > self.clusterWeightsMax[weightType]:
                         self.clusterWeightsMax[weightType] = power
@@ -628,7 +642,27 @@ class Graph():
             for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
                 weight = ((cluster.weights[weightType] * MAX_WEIGHT) / self.clusterWeightsMax[weightType]) + 1
                 cluster.setWeightNormalized(weightType, int(weight))
+                if weightType == 1:
+                    totalNormalizedPower += cluster.weightsNormalized[weightType]
             print cluster.weightsNormalized
+
+
+        if DUMMY_CLUSTER:
+            # Append the dummy cluster to the cluster list.
+            dummy = Cluster(DUMMY_NAME, len(self.clusters), False)
+            # If we want 70/30 asymmetry, the dummy power will be
+            # totalNormalizedPower * 0.4, using 40 % of one partition's power
+            dummyPower = totalNormalizedPower * (POWER_ASYMMETRY - (100 - POWER_ASYMMETRY)) / 100
+            print "totalNormalizedPower: " + str(totalNormalizedPower) + \
+                ", dummyPower: " + str(dummyPower)
+            dummy.setArea(0.1)
+            dummy.setPower(dummyPower)
+            dummy.setWeight(0, 0.1)
+            dummy.setWeight(1, dummy.power)
+            dummy.setWeightNormalized(0, 1)
+            dummy.setWeightNormalized(1, dummy.power)
+            dummy.setDummy(True)
+            self.clusters.append(dummy)
 
 
 
@@ -678,14 +712,17 @@ class Graph():
 
 
         data = fIn.readlines()
-        s = ""
         for i, cluster in enumerate(self.clusters):
+            s = ""
+            # Comment the dummy cluster out.
+            if cluster.name == DUMMY_NAME:
+                s += "#"
             if cluster.blackbox:
-                s = "add_to_die -inst    " + str(cluster.name) + \
+                s += "add_to_die -inst    " + str(cluster.name) + \
                     " " * (maxLength - len(cluster.name)) + \
                     " -die Die" + str(data[i])
             else:
-                s = "add_to_die -cluster " + str(cluster.name) + \
+                s += "add_to_die -cluster " + str(cluster.name) + \
                     " " * (maxLength - len(cluster.name)) + \
                     " -die Die" + str(data[i])
             fOut.write(s)
@@ -696,6 +733,7 @@ class Graph():
         
     def dumpClusters(self):
         s = ""
+        print "len(self.clusters) = " + str(len(self.clusters))
         for cluster in self.clusters:
             s += str(cluster.ID) + "\t" + cluster.name + "\n"
         with open("clusters", 'w') as f:
@@ -718,7 +756,7 @@ class Graph():
                 for i in xrange(0, len(lines)):
                     lines[i] = lines[i].strip(' \n')
                 partitions.append(lines)
-                print lines
+                # print lines
 
         table += "\n"
 
@@ -769,13 +807,22 @@ class Graph():
 
         for line in lines:
             lineData = line.split()
-            found, index = self.findClusterByName(lineData[2])
-            if lineData[4] == "Die0":
-                partitionsArea[0] += self.clusters[index].area
-            elif lineData[4] == "Die1":
-                partitionsArea[1] += self.clusters[index].area
+            if lineData[2] != DUMMY_NAME:
+                found, index = self.findClusterByName(lineData[2])
+                if lineData[4] == "Die0":
+                    partitionsArea[0] += self.clusters[index].area
+                elif lineData[4] == "Die1":
+                    partitionsArea[1] += self.clusters[index].area
+        
+        totalArea = 0
+        for part in partitionsArea:
+            totalArea += part
 
-        print partitionsArea
+        areaFraction = [0] * 2
+        for i, part in enumerate(partitionsArea):
+            areaFraction[i] = float(part) / totalArea
+
+        print "Area: " + str(partitionsArea) + " " + str(areaFraction)
 
 
     def computePartitionPower(self, filename):
@@ -786,10 +833,21 @@ class Graph():
 
         for line in lines:
             lineData = line.split()
-            found, index = self.findClusterByName(lineData[2])
-            partitionIndex = int(lineData[4][3]) # Fourth character of 'DieX'
-            partitionsPower[partitionIndex] += self.clusters[index].power
-        print partitionsPower
+            if lineData[2] != DUMMY_NAME:
+                found, index = self.findClusterByName(lineData[2])
+                partitionIndex = int(lineData[4][3]) # Fourth character of 'DieX'
+                partitionsPower[partitionIndex] += self.clusters[index].power
+
+        totalPower = 0
+        for part in partitionsPower:
+            totalPower += part
+
+        powerFraction = [0] * 2
+        for i, part in enumerate(partitionsPower):
+            powerFraction[i] = float(part) / totalPower
+
+
+        print "Power: " + str(partitionsPower) + " " + str(powerFraction)
 
 
         
@@ -851,6 +909,7 @@ class Cluster:
         self.weightsNormalized = [0] * VERTEX_WEIGHTS_TYPES
         self.power = 0
         self.powerDensity = 0
+        self.isDummy = False
 
 
     def setBoundaries(self, lowerX, lowerY, upperX, upperY):
@@ -908,6 +967,9 @@ class Cluster:
     def setPowerDensity(self, powerDensity):
         self.powerDensity = powerDensity
 
+    def setDummy(self, status):
+        self.isDummy = status
+
 
 class Hyperedge:
     def __init__(self):
@@ -960,8 +1022,8 @@ if __name__ == "__main__":
 #    -------------------------------------------- 
 #    Name | Type | Area | Inst | Cnt |  Area(%) 
 #    -------------------------------------------- 
-    dirs=["../input_files/"]
-    # dirs=["../ccx/"]
+    # dirs=["../input_files/"]
+    dirs=["../ccx/"]
     # dirs=["../CCX_HL1/"]
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
