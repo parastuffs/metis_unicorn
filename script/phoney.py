@@ -732,10 +732,11 @@ class Graph():
         # print "<---------------------------------------------------\n"
         
     def dumpClusters(self):
-        s = ""
-        print "len(self.clusters) = " + str(len(self.clusters))
+        s = "ID -- Cluster -- Area -- Power density -- Power"
+        # print "len(self.clusters) = " + str(len(self.clusters))
         for cluster in self.clusters:
-            s += str(cluster.ID) + "\t" + cluster.name + "\n"
+            s += str(cluster.ID) + "\t" + cluster.name + "\t" + str(cluster.area) + "\t" + \
+                str(cluster.powerDensity) + "\t" + str(cluster.power) + "\n"
         with open("clusters", 'w') as f:
             f.write(s)
 
