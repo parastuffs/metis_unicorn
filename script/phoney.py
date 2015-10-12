@@ -36,7 +36,7 @@ THREADS = 3     # Amount of parallel process to use when building the hypergraph
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
                         # 2: Custom clustering, no boundaries
-MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
+MEMORY_BLOCKS = True   # True if there are memory blocks (bb.out)
 IMPORT_HYPERGRAPH = True    # True: import the hypergraph from a previous dump,
                             # skip the graph building directly to the partitioning.
 # DUMP_FILE = 'hypergraph.dump'
@@ -88,7 +88,7 @@ def buildHyperedges(processID, startIndex, endIndex, nets, clusters, pipe):
     i = startIndex
     while i < endIndex:
         net = nets[i]
-        connectedClusters = list()
+        connectedClusters = list() # List of clusters.
 
         # Now, for each net, we get its list of instances.
         for netInstance in net.instances: # netInstance are Instance object.
@@ -496,7 +496,7 @@ class Graph():
                     for l, clusterB in enumerate(hyperedge.clusters):
                         clusterB = self.clusters[clusterB.ID]
                         if l != k:
-                            clusterA.connectedClusters.append(clusterB)
+                            clusterA.connectedClusters.append(clusterB.ID)
                             clusterA.connectedEdges.append(hyperedge)
                     # print len(clusterA.connectedClusters)
 
@@ -518,7 +518,7 @@ class Graph():
                 for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
                     s += str(cluster.weightsNormalized[weightType]) + " "
                 for j in xrange(0, len(cluster.connectedClusters)):
-                    s += " " + str(cluster.connectedClusters[j].ID + 1) + \
+                    s += " " + str(cluster.connectedClusters[j] + 1) + \
                         " " + str(cluster.connectedEdges[j].weightsNormalized[edgeWeightType])
 
 
@@ -682,7 +682,7 @@ class Graph():
         dbglvl = 8
         command = ""
         if SIMPLE_GRAPH:
-            command = METIS_PATH + "gpmetis " + filename + " 2 -dbglvl=0"
+            command = METIS_PATH + "gpmetis " + filename + " 2 -dbglvl=0 -ufactor=30"
         else:
             command = HMETIS_PATH + "hmetis " + filename + " " + str(Nparts) + \
                 " " + str(UBfactor) + " " + str(Nruns) + " " + str(Ctype) + " " + \
@@ -843,8 +843,9 @@ class Graph():
             totalPower += part
 
         powerFraction = [0] * 2
-        for i, part in enumerate(partitionsPower):
-            powerFraction[i] = float(part) / totalPower
+        if totalPower > 0:
+            for i, part in enumerate(partitionsPower):
+                powerFraction[i] = float(part) / totalPower
 
 
         print "Power: " + str(partitionsPower) + " " + str(powerFraction)
@@ -894,7 +895,7 @@ class Cluster:
                             # [1] = power
                             # [2] = area & power
         self.weightsNormalized = []
-        self.connectedClusters = [] # List of Cluster objects connected to this cluster.
+        self.connectedClusters = [] # List of Cluster IDs connected to this cluster.
         self.connectedEdges = []    # List of Hyperedge objects.
                                     # They are the edges connecting this cluster to others.
                                     # Those hyperedges are needed to establish weights.
@@ -1023,7 +1024,7 @@ if __name__ == "__main__":
 #    Name | Type | Area | Inst | Cnt |  Area(%) 
 #    -------------------------------------------- 
     # dirs=["../input_files/"]
-    dirs=["../ccx/"]
+    # dirs=["../ccx/"]
     # dirs=["../CCX_HL1/"]
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
@@ -1033,6 +1034,7 @@ if __name__ == "__main__":
     # dirs = ["../spc_HL1/"]
     # dirs = ["../spc_HL2/"]
     # dirs = ["../SPC/spc_HL3/"]
+    dirs = ["../SPC/spc_HL2/"]
     # dirs = ["../CCX_Auto0500/"]
     # dirs = ["../CCX_Auto1000/"]
     # dirs = ["../RTX/RTX_HL3/"]
