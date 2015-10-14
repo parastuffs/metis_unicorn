@@ -27,16 +27,16 @@ global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
 EDGE_WEIGHTS_TYPES = 10
-VERTEX_WEIGHTS_TYPES = 2
+VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
-SIMPLE_GRAPH = True    # False: hypergraph, using hmetis
-                        # True: standard graph, using gpmetis
-THREADS = 3     # Amount of parallel process to use when building the hypergraph.
+THREADS = 4     # Amount of parallel process to use when building the hypergraph.
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
                         # 2: Custom clustering, no boundaries
-MEMORY_BLOCKS = True   # True if there are memory blocks (bb.out)
+SIMPLE_GRAPH = True    # False: hypergraph, using hmetis
+                        # True: standard graph, using gpmetis
+MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
 IMPORT_HYPERGRAPH = True    # True: import the hypergraph from a previous dump,
                             # skip the graph building directly to the partitioning.
 # DUMP_FILE = 'hypergraph.dump'
@@ -47,7 +47,7 @@ HETEROGENEOUS_FACTOR = 5 #
 RANDOM_SEED = 0 # 0: no seed, pick a new one
                 # other: use this
 
-DUMMY_CLUSTER = True # Add a dummy cluster (low area, high power)
+DUMMY_CLUSTER = False # Add a dummy cluster (low area, high power)
 DUMMY_NAME = "dummy_cluster"
 POWER_ASYMMETRY = 80    # [50; 100]
                         # At 50: symmetry
@@ -1008,6 +1008,42 @@ class Instance:
     def __init__(self, name):
         self.name = name
 
+# def initWeightsStr(mydir, metisInputFiles, paritionFiles, partitionDirectivesFiles):
+def initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr):
+
+    for edgeWeightType in xrange(0, EDGE_WEIGHTS_TYPES):
+        if edgeWeightType == 0:
+            edgeWeightTypesStr.append("01_NoWires")
+        if edgeWeightType == 1:
+            edgeWeightTypesStr.append("02_1-NoWires")
+        if edgeWeightType == 2:
+            edgeWeightTypesStr.append("03_TotLength")
+        if edgeWeightType == 3:
+            edgeWeightTypesStr.append("04_1-TotLength")
+        if edgeWeightType == 4:
+            edgeWeightTypesStr.append("05_AvgLength")
+        if edgeWeightType == 5:
+            edgeWeightTypesStr.append("06_1-AvgLength")
+        if edgeWeightType == 6:
+            edgeWeightTypesStr.append("07_NoWiresXTotLength")
+        if edgeWeightType == 7:
+            edgeWeightTypesStr.append("08_1-NoWiresXTotLength")
+        if edgeWeightType == 8:
+            edgeWeightTypesStr.append("09_NoWires+TotLength")
+        if edgeWeightType == 9:
+            edgeWeightTypesStr.append("10_1-NoWires+TotLength")
+
+    if SIMPLE_GRAPH and VERTEX_WEIGHTS_TYPES == 2:
+        vertexWeightTypesStr.append("area-power")
+    else:
+        for vertexWeightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+            if vertexWeightType == 0:
+                vertexWeightTypesStr.append("area")
+            elif vertexWeightType == 1:
+                vertexWeightTypesStr.append("power")
+
+
+
 #----------------------------------------------------------------
 #----------------------------------------------------------------
 #----------------------------------------------------------------
@@ -1027,7 +1063,7 @@ if __name__ == "__main__":
     # dirs=["../input_files/"]
     # dirs=["../ccx/"]
     # dirs=["../CCX_HL1/"]
-    # dirs=["../CCX_HL2/"]
+    dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
     # dirs=["../CCX_HL4/"]
     # dirs = ["../MPSoC/"]
@@ -1035,7 +1071,7 @@ if __name__ == "__main__":
     # dirs = ["../spc_HL1/"]
     # dirs = ["../spc_HL2/"]
     # dirs = ["../SPC/spc_HL3/"]
-    dirs = ["../SPC/spc_HL2/"]
+    # dirs = ["../SPC/spc_HL2/"]
     # dirs = ["../CCX_Auto0500/"]
     # dirs = ["../CCX_Auto1000/"]
     # dirs = ["../RTX/RTX_HL3/"]
@@ -1047,6 +1083,10 @@ if __name__ == "__main__":
         RANDOM_SEED = random.random()
     random.seed(RANDOM_SEED)
     print "Seed: " + str(RANDOM_SEED)
+
+    edgeWeightTypesStr = list()
+    vertexWeightTypesStr = list()
+    initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr)
 
     graph = Graph()
     clusterCount = 500
@@ -1107,57 +1147,20 @@ if __name__ == "__main__":
 
         paritionFiles = []
 
-        for edgeWeightType in xrange(0, EDGE_WEIGHTS_TYPES):
-            for vertexWeightType in xrange(0, VERTEX_WEIGHTS_TYPES):
-                metisInput = mydir + "metis"
-                print "============================================================="
-                if edgeWeightType == 0:
-                    print "> Edge weight: number of wires"
-                    metisInput += "_01_NoWires"
-                if edgeWeightType == 1:
-                    print "> Edge weight: 1 / number of wires"
-                    metisInput += "_02_1-NoWires"
-                if edgeWeightType == 2:
-                    print "> Edge weight: total wire length"
-                    metisInput += "_03_TotLength"
-                if edgeWeightType == 3:
-                    print "> Edge weight: 1 / total wire length"
-                    metisInput += "_04_1-TotLength"
-                if edgeWeightType == 4:
-                    print "> Edge weight: average wire length"
-                    metisInput += "_05_AvgLength"
-                if edgeWeightType == 5:
-                    print "> Edge weight: 1 / average wire length"
-                    metisInput += "_06_1-AvgLength"
-                if edgeWeightType == 6:
-                    print "> Edge weight: number of wire * total wire length"
-                    metisInput += "_07_NoWiresXTotLength"
-                if edgeWeightType == 7:
-                    print "> Edge weight: 1 / number of wire * total wire length"
-                    metisInput += "_08_1-NoWiresXTotLength"
-                if edgeWeightType == 8:
-                    print "> Edge weight: " + str(WEIGHT_COMBILI_COEF) + \
-                        " number of wire * " + \
-                        str(1 - WEIGHT_COMBILI_COEF) + " total wire length"
-                    metisInput += "_09_NoWires+TotLength"
-                if edgeWeightType == 9:
-                    print "> Edge weight: 1 / " + str(WEIGHT_COMBILI_COEF) + \
-                        " number of wire * " + \
-                        str(1 - WEIGHT_COMBILI_COEF) + " total wire length"
-                    metisInput += "_10_1-NoWires+TotLength"
-
-                if vertexWeightType == 0:
-                    print "> Vertex weight: cluster area"
-                    metisInput += "_Area"
-                elif vertexWeightType == 1:
-                    print "> Vertex weight: cluster density power"
-                    metisInput += "_Power"
-                print "============================================================="
-                metisInput += ".hgr"
-                graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
-                graph.GraphPartition(metisInput)
+        for edgeWeightType in xrange(0, len(edgeWeightTypesStr)):
+            for vertexWeightType in xrange(0, len(vertexWeightTypesStr)):
+                metisInput = mydir + "metis_" + edgeWeightTypesStr[edgeWeightType] + \
+                    "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr"
                 metisPartitionFile = metisInput + ".part.2"
                 partitionDirectivesFile = metisInput + ".tcl"
+
+                print "============================================================="
+                print "> Edge weight: " + edgeWeightTypesStr[edgeWeightType]
+                print "> Vertex weight: " + vertexWeightTypesStr[vertexWeightType]
+                print "============================================================="
+
+                graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
+                graph.GraphPartition(metisInput)
                 graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile)
                 graph.computePartitionArea(partitionDirectivesFile)
                 graph.computePartitionPower(partitionDirectivesFile)
