@@ -602,6 +602,20 @@ class Graph():
 
     #     return smallestID
 
+    def computeClustersPower(self):
+        for cluster in self.clusters:
+            powerDensity = random.uniform(1, HETEROGENEOUS_FACTOR)
+            power = cluster.area * powerDensity
+            cluster.setPowerDensity(powerDensity)
+            cluster.setPower(power)
+            print "Power density = " + str(powerDensity) + \
+                ", area = " + str(cluster.area) + \
+                ", power = " + str(power)
+            cluster.setPowerDensity(powerDensity)
+            cluster.setPower(power)
+            cluster.setWeight(weightType, cluster.power)
+
+
     def computeVertexWeights(self):
         print "Generating weights of vertex."
         self.clusterWeightsMax = [0] * VERTEX_WEIGHTS_TYPES
@@ -624,18 +638,12 @@ class Graph():
             elif weightType == 1:
 
                 for cluster in self.clusters:
-                    powerDensity = random.uniform(1, HETEROGENEOUS_FACTOR)
-                    power = cluster.area * powerDensity
-                    print "Power density = " + str(powerDensity) + \
-                        ", area = " + str(cluster.area) + \
-                        ", power = " + str(power)
-                    totalPower += power
-                    cluster.setPowerDensity(powerDensity)
-                    cluster.setPower(power)
-                    cluster.setWeight(weightType, cluster.power)
+                    weight = cluster.power
+                    totalPower += weight
+                    cluster.setWeight(weightType, weight)
 
-                    if power > self.clusterWeightsMax[weightType]:
-                        self.clusterWeightsMax[weightType] = power
+                    if weight > self.clusterWeightsMax[weightType]:
+                        self.clusterWeightsMax[weightType] = weight
 
         # Normalization
         for cluster in self.clusters:
@@ -1063,7 +1071,7 @@ if __name__ == "__main__":
     # dirs=["../input_files/"]
     # dirs=["../ccx/"]
     # dirs=["../CCX_HL1/"]
-    dirs=["../CCX_HL2/"]
+    # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
     # dirs=["../CCX_HL4/"]
     # dirs = ["../MPSoC/"]
@@ -1073,7 +1081,7 @@ if __name__ == "__main__":
     # dirs = ["../SPC/spc_HL3/"]
     # dirs = ["../SPC/spc_HL2/"]
     # dirs = ["../CCX_Auto0500/"]
-    # dirs = ["../CCX_Auto1000/"]
+    dirs = ["../CCX_Auto1000/"]
     # dirs = ["../RTX/RTX_HL3/"]
     # dirs = ["../RTX/RTX_HL2/"]
     # dirs = ["../RTX/RTX_A0500/"]
@@ -1142,6 +1150,7 @@ if __name__ == "__main__":
                 graph = pickle.load(f)
 
         edgeWeightType = 0
+        graph.computeClustersPower()
         graph.computeHyperedgeWeights(True)
         graph.computeVertexWeights()
 
