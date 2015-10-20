@@ -42,7 +42,7 @@ IMPORT_HYPERGRAPH = True    # True: import the hypergraph from a previous dump,
 # DUMP_FILE = 'hypergraph.dump'
 DUMP_FILE = 'simplegraph.dump'
 
-HETEROGENEOUS_FACTOR = 5 # 
+HETEROGENEOUS_FACTOR = 5 #
 
 RANDOM_SEED = 0 # 0: no seed, pick a new one
                 # other: use this
@@ -109,7 +109,7 @@ def buildHyperedges(processID, startIndex, endIndex, nets, clusters, pipe):
                             j += 1
                     if not clusterFound:
                         connectedClusters.append(cluster)
- 
+
         # Append the list A of connected clusters to the list B of hyperedges
         # only if there are more than one cluster in list A.
         if len(connectedClusters) > 1:
@@ -146,6 +146,10 @@ class Graph():
         self.hyperedges = []
         self.hyperedgeWeightsMax = []   # Maximum weight for each weight type.
                                         # Ordered by weight type.
+        self.partitions = []    # Each element is a list of clusters (objects)
+                                # included in the corresponding cluster.
+        self.partitionsArea = []
+        self.partitionsPower = []
         self.logfilename = "graph.log"
         call(["rm","-rf","graph.log"])
 
@@ -187,7 +191,7 @@ class Graph():
                 upperBounds = clusterDataRow[4][1:-1].split(",")
                 cluster.setBoundaries(float(lowerBounds[0]), float(lowerBounds[1]),
                     float(upperBounds[0]), float(upperBounds[1]))
-                
+
                 cluster.setArea(float(clusterDataRow[5]))
                 self.clusters.append(cluster)
         elif CLUSTER_INPUT_TYPE == 1:
@@ -202,7 +206,7 @@ class Graph():
                 line = line.strip(' \n')
                 clusterDataRow = line.split()
                 cluster = Cluster(clusterDataRow[0], i, False)
-                
+
                 cluster.setArea(float(clusterDataRow[4]))
                 self.clusters.append(cluster)
 
@@ -351,7 +355,7 @@ class Graph():
 
             net = Net(netDataRow[0], i)
             net.setPinAmount(int(netDataRow[1]))
-            net.setWL(int(float(netDataRow[2])) + 1)    # + 1 here to make sure 
+            net.setWL(int(float(netDataRow[2])) + 1)    # + 1 here to make sure
                                                         #we don't use a net with WL = 0
             self.nets.append(net)
             progression = printProgression(i, len(lines))
@@ -398,7 +402,7 @@ class Graph():
             if progression != "":
                 print progression
 
-    
+
     def findHyperedges(self):
         print "Building hyperedges"
 
@@ -588,7 +592,7 @@ class Graph():
             # Normalize
             for hyperedge in self.hyperedges:
                 hyperedge.setWeightNormalized(weightType, int(((hyperedge.weights[weightType] * MAX_WEIGHT) / self.hyperedgeWeightsMax[weightType])) + 1)
-                
+
 
 
 
@@ -613,7 +617,6 @@ class Graph():
                 ", power = " + str(power)
             cluster.setPowerDensity(powerDensity)
             cluster.setPower(power)
-            cluster.setWeight(weightType, cluster.power)
 
 
     def computeVertexWeights(self):
@@ -698,7 +701,7 @@ class Graph():
             print "Calling '" + command + "'"
         # call([HMETIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
         call(command.split())
-    
+
     def WritePartitionDirectives(self, metisFileIn, metisFileOut):
         # print "--------------------------------------------------->"
         print "Write tcl file for file: ", metisFileIn
@@ -738,7 +741,7 @@ class Graph():
         fIn.close()
         print "Done!"
         # print "<---------------------------------------------------\n"
-        
+
     def dumpClusters(self):
         s = "ID -- Cluster -- Area -- Power density -- Power"
         # print "len(self.clusters) = " + str(len(self.clusters))
@@ -805,62 +808,64 @@ class Graph():
         plt.show()
 
 
-    def computePartitionArea(self, filename):
-        with open(filename, 'r') as f:
-            lines = f.read().splitlines()
+    def computePartitionArea(self):
 
-        for i in xrange(0, len(lines)):
-            lines[i] = " ".join(lines[i].split())
+        self.partitionsArea = [0] * 2
 
-        partitionsArea = [0] * 2
+        for i, partition in enumerate(self.partitions):
+            for cluster in partition:
+                self.partitionsArea[i] += cluster.area
 
-        for line in lines:
-            lineData = line.split()
-            if lineData[2] != DUMMY_NAME:
-                found, index = self.findClusterByName(lineData[2])
-                if lineData[4] == "Die0":
-                    partitionsArea[0] += self.clusters[index].area
-                elif lineData[4] == "Die1":
-                    partitionsArea[1] += self.clusters[index].area
-        
         totalArea = 0
-        for part in partitionsArea:
+        for part in self.partitionsArea:
             totalArea += part
 
         areaFraction = [0] * 2
-        for i, part in enumerate(partitionsArea):
+        for i, part in enumerate(self.partitionsArea):
             areaFraction[i] = float(part) / totalArea
 
-        print "Area: " + str(partitionsArea) + " " + str(areaFraction)
+        print "Area: " + str(self.partitionsArea) + " " + str(areaFraction)
 
 
-    def computePartitionPower(self, filename):
-        with open(filename, 'r') as f:
+    def computePartitionPower(self):
+
+        self.partitionsPower = [0] * 2
+
+        for i, partition in enumerate(self.partitions):
+            for cluster in partition:
+                self.partitionsPower[i] += cluster.power
+
+        totalPower = 0
+        for part in self.partitionsPower:
+            totalPower += part
+
+        powerFraction = [0] * 2
+        if totalPower > 0:
+            for i, part in enumerate(self.partitionsPower):
+                powerFraction[i] = float(part) / totalPower
+
+
+        print "Power: " + str(self.partitionsPower) + " " + str(powerFraction)
+
+
+    def extractPartitions(self, partitionFile):
+        with open(partitionFile, 'r') as f:
             lines = f.read().splitlines()
 
-        partitionsPower = [0] * 2
+        for i in xrange(0, 2):
+            self.partitions.append(list())
 
         for line in lines:
             lineData = line.split()
             if lineData[2] != DUMMY_NAME:
                 found, index = self.findClusterByName(lineData[2])
                 partitionIndex = int(lineData[4][3]) # Fourth character of 'DieX'
-                partitionsPower[partitionIndex] += self.clusters[index].power
-
-        totalPower = 0
-        for part in partitionsPower:
-            totalPower += part
-
-        powerFraction = [0] * 2
-        if totalPower > 0:
-            for i, part in enumerate(partitionsPower):
-                powerFraction[i] = float(part) / totalPower
+                self.partitions[partitionIndex].append(self.clusters[index])
 
 
-        print "Power: " + str(partitionsPower) + " " + str(powerFraction)
 
 
-        
+
 
 
 
@@ -1065,12 +1070,12 @@ if __name__ == "__main__":
 #   connectivity.Read()
 #==========================================================================
 # Read rpt gen with report physical.hierarchy
-#    -------------------------------------------- 
-#    Name | Type | Area | Inst | Cnt |  Area(%) 
-#    -------------------------------------------- 
+#    --------------------------------------------
+#    Name | Type | Area | Inst | Cnt |  Area(%)
+#    --------------------------------------------
     # dirs=["../input_files/"]
     # dirs=["../ccx/"]
-    # dirs=["../CCX_HL1/"]
+    dirs=["../CCX_HL1/"]
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
     # dirs=["../CCX_HL4/"]
@@ -1081,7 +1086,7 @@ if __name__ == "__main__":
     # dirs = ["../SPC/spc_HL3/"]
     # dirs = ["../SPC/spc_HL2/"]
     # dirs = ["../CCX_Auto0500/"]
-    dirs = ["../CCX_Auto1000/"]
+    # dirs = ["../CCX_Auto1000/"]
     # dirs = ["../RTX/RTX_HL3/"]
     # dirs = ["../RTX/RTX_HL2/"]
     # dirs = ["../RTX/RTX_A0500/"]
@@ -1171,8 +1176,9 @@ if __name__ == "__main__":
                 graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                 graph.GraphPartition(metisInput)
                 graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile)
-                graph.computePartitionArea(partitionDirectivesFile)
-                graph.computePartitionPower(partitionDirectivesFile)
+                graph.extractPartitions(partitionDirectivesFile)
+                graph.computePartitionArea()
+                graph.computePartitionPower()
                 paritionFiles.append(metisPartitionFile)
         graph.dumpClusters()
         graph.hammingReport(paritionFiles)
