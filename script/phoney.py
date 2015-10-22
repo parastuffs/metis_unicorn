@@ -26,7 +26,8 @@ import random
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
-EDGE_WEIGHTS_TYPES = 10
+# EDGE_WEIGHTS_TYPES = 10
+EDGE_WEIGHTS_TYPES = 1
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
@@ -52,6 +53,7 @@ DUMMY_NAME = "dummy_cluster"
 POWER_ASYMMETRY = 80    # [50; 100]
                         # At 50: symmetry
                         # At 100: evrything in one partition
+MANUAL_ASYMMETRY = True # Execute a manual asymmetrisation of the power across partitions.
 
 POWER_DENSITIES = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.08, 0.05, 0.05]
 
@@ -137,6 +139,25 @@ def buildHyperedges(processID, startIndex, endIndex, nets, clusters, pipe):
 
     pipe.send(hyperedges)
     pipe.close()
+
+def closeEnough(target, value):
+    tolerance = 0.1
+    if value < (target + tolerance*target) and \
+        value > (target - tolerance*target):
+        return True
+    else:
+        return False
+
+def elementIsInList(element, theList):
+    found = False
+    try:
+        theList.index(element)
+    except:
+        pass
+    else:
+        found = True
+    return found
+
 
 
 class Graph():
@@ -862,6 +883,120 @@ class Graph():
                 partitionIndex = int(lineData[4][3]) # Fourth character of 'DieX'
                 self.partitions[partitionIndex].append(self.clusters[index])
 
+    def findHighestDensityCluster(self, clusters, unmatchableClusters):
+        """
+        return: - The power density of the selected cluster.
+                - The ID of the cluster in the 'clusters' list.
+        """
+        den = 0 # highest density
+        denCluster = None
+        for i, cluster in enumerate(clusters):
+            if cluster.powerDensity > den and \
+            not elementIsInList(cluster.ID, unmatchableClusters) :
+                den = cluster.powerDensity
+                denCluster = i
+        return denCluster, den
+
+    def findLowDensityCluster(self, clusters, maxDensity, area):
+        """
+        - maxDensity is the density of the cluster that will replace the ones
+            we pick here, and its power density should not be exceeded by them.
+        - area is the area of the cluster to replace. The total area of the
+            picked clusters here should be equal to that value.
+        return: - a list of selected clusters (ID in the 'clusters' list)
+        """
+        clusterSelection = []
+        areaSelection = 0 # total area of the selection
+
+        # First, try to find one of the same are (+- 5 %) with a lower density
+        # TODO: If several of the same area, keep the lowest density
+        # for i, cluster in enumerate(clusters):
+        #     isCloseEnough = closeEnough(area, cluster.area)
+        #     if isCloseEnough and cluster.powerDensity < maxDensity:
+        #         clusterSelection.append(i)
+        #         areaSelection = cluster.area
+
+        # If it does not work, use the accumulation of smaller clusters.
+        # if len(clusterSelection) == 0:
+        print "Looking for low density clusters"
+        # print "areaSelection: " + str(areaSelection) + ", target area: " + str(area)
+        for i, cluster in enumerate(clusters):
+            print str(cluster.powerDensity) + " " + str(cluster.area)
+            if cluster.powerDensity < maxDensity and \
+            closeEnough(area, areaSelection + cluster.area) and \
+            not elementIsInList(i, clusterSelection):
+                areaSelection += cluster.area
+                clusterSelection.append(i)
+
+        return clusterSelection, areaSelection
+
+
+
+    def manualOverride(self):
+        """
+        Use the self.partitions and move clusters around.
+        Choose arbitrarily the partition 0 to host the low power part.
+        The objective is to move clusters with high power away from this partition,
+        whilst keeping the area balanced between the partitions.
+        In partition 0, pick the cluster with the highest power density. Then, in
+        partition 1, take the clusters with the lowest power density with the
+        same total area as the cluster from partition 0.
+        At the end of each iteration, we will evaluate the quality of the solution
+        on two criteria: area balance and power asymmetry. If the asymmetry
+        does not reach the target (e.g. 70/30), we keep going (with a limit
+        to the number of iterations).
+        """
+
+        unmatchableClusters = [] # List of cluster IDs for which lower density
+                                # cluster could not be found in partition 1.
+
+        for i in xrange(0, 10):
+            print "RUN #" + str(i)
+            highDenCluster, highDen = self.findHighestDensityCluster(self.partitions[0], unmatchableClusters)
+            highDenArea = self.partitions[0][highDenCluster].area
+            print "High density cluster: " + str(highDen) + ", area: " + str(highDenArea)
+            # TODO: Check if highDenCluster is not none.
+
+            lowDenClusters, lowDenArea = self.findLowDensityCluster(self.partitions[1], highDen, highDenArea)
+            if closeEnough(highDenArea, lowDenArea):
+                lowDenClusters.sort()
+                print "Low density clusters: (total area: " + str(lowDenArea) + ")"
+                for id in lowDenClusters:
+                    cluster = self.partitions[1][id]
+                    print "den: " + str(cluster.powerDensity) + ", area: " + str(cluster.area)
+
+                # Swap the clusters
+                print "BEFORE SWAPING:"
+                for i, part in enumerate(self.partitions):
+                    print "Partition " + str(i)
+                    for c in part:
+                        print c.ID
+
+                self.partitions[1].append(self.partitions[0][highDenCluster])
+                del self.partitions[0][highDenCluster]
+                for id in lowDenClusters:
+                    self.partitions[0].append(self.partitions[1][id])
+
+                # Delete in reversed order because when you delete an element, the
+                # others are shifted to take its place.
+                for id in reversed(lowDenClusters):
+                    print str(id)
+                    del self.partitions[1][id]
+
+                print "AFTER SWAPING:"
+                for i, part in enumerate(self.partitions):
+                    print "Partition " + str(i)
+                    for c in part:
+                        print c.ID
+
+            # If the area is not close enough, the high density cluster could
+            # not be matched. Blacklist its ID.
+            else:
+                print "High density cluster unmatchable"
+                unmatchableClusters.append(self.partitions[0][highDenCluster].ID)
+
+            self.computePartitionArea()
+            self.computePartitionPower()
 
 
 
@@ -1075,10 +1210,10 @@ if __name__ == "__main__":
 #    --------------------------------------------
     # dirs=["../input_files/"]
     # dirs=["../ccx/"]
-    dirs=["../CCX_HL1/"]
+    # dirs=["../CCX_HL1/"]
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
-    # dirs=["../CCX_HL4/"]
+    dirs=["../CCX_HL4/"]
     # dirs = ["../MPSoC/"]
     # dirs = ["../spc_L3/"]
     # dirs = ["../spc_HL1/"]
@@ -1179,6 +1314,8 @@ if __name__ == "__main__":
                 graph.extractPartitions(partitionDirectivesFile)
                 graph.computePartitionArea()
                 graph.computePartitionPower()
+                if MANUAL_ASYMMETRY:
+                    graph.manualOverride()
                 paritionFiles.append(metisPartitionFile)
         graph.dumpClusters()
         graph.hammingReport(paritionFiles)
