@@ -26,22 +26,25 @@ import random
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
+PATOH_PATH = "/home/para/Downloads/patoh/build/Linux-x86_64/"
+ALGO = 1 # 0: METIS
+         # 1: PaToH
 # EDGE_WEIGHTS_TYPES = 10
 EDGE_WEIGHTS_TYPES = 1
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
-THREADS = 4     # Amount of parallel process to use when building the hypergraph.
+THREADS = 7     # Amount of parallel process to use when building the hypergraph.
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
                         # 2: Custom clustering, no boundaries
-SIMPLE_GRAPH = True    # False: hypergraph, using hmetis
+SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
                         # True: standard graph, using gpmetis
 MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
 IMPORT_HYPERGRAPH = True    # True: import the hypergraph from a previous dump,
                             # skip the graph building directly to the partitioning.
-# DUMP_FILE = 'hypergraph.dump'
-DUMP_FILE = 'simplegraph.dump'
+DUMP_FILE = 'hypergraph.dump'
+# DUMP_FILE = 'simplegraph.dump'
 
 HETEROGENEOUS_FACTOR = 5 #
 
@@ -53,7 +56,7 @@ DUMMY_NAME = "dummy_cluster"
 POWER_ASYMMETRY = 80    # [50; 100]
                         # At 50: symmetry
                         # At 100: evrything in one partition
-MANUAL_ASYMMETRY = True # Execute a manual asymmetrisation of the power across partitions.
+MANUAL_ASYMMETRY = False # Execute a manual asymmetrisation of the power across partitions.
 
 POWER_DENSITIES = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.08, 0.05, 0.05]
 
@@ -141,7 +144,7 @@ def buildHyperedges(processID, startIndex, endIndex, nets, clusters, pipe):
     pipe.close()
 
 def closeEnough(target, value):
-    tolerance = 0.1
+    tolerance = 0.2
     if value < (target + tolerance*target) and \
         value > (target - tolerance*target):
         return True
@@ -560,6 +563,36 @@ class Graph():
             file.write(s)
 
 
+    def generatePaToHInput(self, filename, edgeWeightType, vertexWeightType):
+        print "Generating PaToH input file..."
+        s = ""
+
+        # Compute the amount of 'pins' in the hypergraph.
+        # For PaToH, a pin is a vertex in a hyperedge.
+        # So to compute this amount, we simply need to now how
+        # many vertex (cluster, here) are in each hyperedge.
+        pins = 0
+        for hyperedge in self.hyperedges:
+            pins += len(hyperedge.clusters)
+
+        # TODO add the possibility to have all the vertex weights types in the same description (PaToH can do that).
+        s = "1 " + str(len(self.clusters)) + " " + str(len(self.hyperedges)) + " " + str(pins) + " 3" + " 1"
+        for i, hyperedge in enumerate(self.hyperedges):
+            s += "\n" + str(hyperedge.weightsNormalized[edgeWeightType]) + " "
+            for cluster in hyperedge.clusters:
+                s += str(cluster.ID + 1) + " "
+
+        s += "\n"
+
+        for cluster in self.clusters:
+            s += str(cluster.weightsNormalized[vertexWeightType]) + " "
+
+        s += "\n" # Requires a new line at the end of the file.
+
+        with open(filename, 'w') as file:
+            file.write(s)
+
+
     def computeHyperedgeWeights(self, normalized):
         print "Generating weights of hyperedges."
 
@@ -628,20 +661,24 @@ class Graph():
     #     return smallestID
 
     def computeClustersPower(self):
+        '''
+        For each cluster, set a random power density.
+        The power of the cluster is thus its density * its area.
+        '''
         for cluster in self.clusters:
             powerDensity = random.uniform(1, HETEROGENEOUS_FACTOR)
             power = cluster.area * powerDensity
             cluster.setPowerDensity(powerDensity)
             cluster.setPower(power)
-            print "Power density = " + str(powerDensity) + \
-                ", area = " + str(cluster.area) + \
-                ", power = " + str(power)
+            # print "Power density = " + str(powerDensity) + \
+            #     ", area = " + str(cluster.area) + \
+            #     ", power = " + str(power)
             cluster.setPowerDensity(powerDensity)
             cluster.setPower(power)
 
 
     def computeVertexWeights(self):
-        print "Generating weights of vertex."
+        print "Generating weights of vertices."
         self.clusterWeightsMax = [0] * VERTEX_WEIGHTS_TYPES
         totalPower = 0
         totalNormalizedPower = 0
@@ -676,7 +713,7 @@ class Graph():
                 cluster.setWeightNormalized(weightType, int(weight))
                 if weightType == 1:
                     totalNormalizedPower += cluster.weightsNormalized[weightType]
-            print cluster.weightsNormalized
+            # print cluster.weightsNormalized
 
 
         if DUMMY_CLUSTER:
@@ -699,6 +736,11 @@ class Graph():
 
 
     def GraphPartition(self, filename):
+        '''
+        Call the hmetis command with the given filename, or gpmetis if we are working
+        with simple graphs.
+        '''
+
         print "--------------------------------------------------->"
         # print "Running partition on cost: ", CostFunction
         print "Running hmetis with " + filename
@@ -723,7 +765,19 @@ class Graph():
         # call([HMETIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
         call(command.split())
 
+
+    def GraphPartitionPaToH(self, filename):
+        print "--------------------------------------------------->"
+        print "Running PaToH with " + filename
+        command = PATOH_PATH + "patoh " + filename + " 2 RA=6 UM=U OD=3"
+        call(command.split())
+
+
     def WritePartitionDirectives(self, metisFileIn, metisFileOut):
+        '''
+        Create the partition directives in .tcl files.
+        This is the final output telling which module (cluster) is going on which die.
+        '''
         # print "--------------------------------------------------->"
         print "Write tcl file for file: ", metisFileIn
         try:
@@ -744,6 +798,9 @@ class Graph():
 
 
         data = fIn.readlines()
+        if ALGO==1: # In PaToH, everything is on one single line.
+            data = data[0].split()
+
         for i, cluster in enumerate(self.clusters):
             s = ""
             # Comment the dummy cluster out.
@@ -757,6 +814,9 @@ class Graph():
                 s += "add_to_die -cluster " + str(cluster.name) + \
                     " " * (maxLength - len(cluster.name)) + \
                     " -die Die" + str(data[i])
+            if ALGO==1:
+                s+= "\n"
+
             fOut.write(s)
         fOut.close()
         fIn.close()
@@ -773,6 +833,13 @@ class Graph():
             f.write(s)
 
     def hammingReport(self, filenames):
+        '''
+        As the output for a bipartition is either 0 or 1 (depending on which die a cluster is
+        assigned to), by comparing the output of two different partition (e.g. based on different
+        weights) for the same clusters, we can compute some sort of Hamming distance between
+        them.
+        This metric caracterize the difference bewteen two bipartitions.
+        '''
         partitions = []
         table = ""
 
@@ -883,6 +950,14 @@ class Graph():
                 partitionIndex = int(lineData[4][3]) # Fourth character of 'DieX'
                 self.partitions[partitionIndex].append(self.clusters[index])
 
+
+    def printPartitions(self):
+        for i, partition in enumerate(self.partitions):
+            print "Partition #" + str(i)
+            for cluster in partition:
+                print cluster.name + ", " + str(cluster.area) + ", " + str(cluster.powerDensity)
+
+
     def findHighestDensityCluster(self, clusters, unmatchableClusters):
         """
         return: - The power density of the selected cluster.
@@ -908,6 +983,7 @@ class Graph():
         clusterSelection = []
         areaSelection = 0 # total area of the selection
 
+
         # First, try to find one of the same are (+- 5 %) with a lower density
         # TODO: If several of the same area, keep the lowest density
         # for i, cluster in enumerate(clusters):
@@ -921,7 +997,7 @@ class Graph():
         print "Looking for low density clusters"
         # print "areaSelection: " + str(areaSelection) + ", target area: " + str(area)
         for i, cluster in enumerate(clusters):
-            print str(cluster.powerDensity) + " " + str(cluster.area)
+            # print str(cluster.powerDensity) + " " + str(cluster.area)
             if cluster.powerDensity < maxDensity and \
             closeEnough(area, areaSelection + cluster.area) and \
             not elementIsInList(i, clusterSelection):
@@ -950,12 +1026,20 @@ class Graph():
         unmatchableClusters = [] # List of cluster IDs for which lower density
                                 # cluster could not be found in partition 1.
 
-        for i in xrange(0, 10):
-            print "RUN #" + str(i)
-            highDenCluster, highDen = self.findHighestDensityCluster(self.partitions[0], unmatchableClusters)
+        # for i in xrange(0, 10):
+        #     print "RUN #" + str(i)
+        #     highDenCluster, highDen = self.findHighestDensityCluster(self.partitions[0], unmatchableClusters)
+        #     highDenArea = self.partitions[0][highDenCluster].area
+        #     print "High density cluster: " + str(highDen) + ", area: " + str(highDenArea)
+        #     # TODO: Check if highDenCluster is not none.
+
+        self.printPartitions()
+
+        i = 0
+        while i < len(self.partitions[0]):
+            highDenCluster = i
+            highDen = self.partitions[0][highDenCluster].powerDensity
             highDenArea = self.partitions[0][highDenCluster].area
-            print "High density cluster: " + str(highDen) + ", area: " + str(highDenArea)
-            # TODO: Check if highDenCluster is not none.
 
             lowDenClusters, lowDenArea = self.findLowDensityCluster(self.partitions[1], highDen, highDenArea)
             if closeEnough(highDenArea, lowDenArea):
@@ -969,6 +1053,7 @@ class Graph():
                 print "BEFORE SWAPING:"
                 for i, part in enumerate(self.partitions):
                     print "Partition " + str(i)
+                    print part
                     for c in part:
                         print c.ID
 
@@ -994,9 +1079,11 @@ class Graph():
             else:
                 print "High density cluster unmatchable"
                 unmatchableClusters.append(self.partitions[0][highDenCluster].ID)
+                i += 1
 
             self.computePartitionArea()
             self.computePartitionPower()
+        self.printPartitions()
 
 
 
@@ -1158,7 +1245,11 @@ class Instance:
 
 # def initWeightsStr(mydir, metisInputFiles, paritionFiles, partitionDirectivesFiles):
 def initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr):
+    '''
+    Gives a name to the the different kind of edge weights adn vertex weights.
+    '''
 
+    # TODO sub-optimial loop. Why did I use all those if?
     for edgeWeightType in xrange(0, EDGE_WEIGHTS_TYPES):
         if edgeWeightType == 0:
             edgeWeightTypesStr.append("01_NoWires")
@@ -1213,8 +1304,8 @@ if __name__ == "__main__":
     # dirs=["../CCX_HL1/"]
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
-    dirs=["../CCX_HL4/"]
-    # dirs = ["../MPSoC/"]
+    # dirs=["../CCX_HL4/"]
+    dirs = ["../MPSoC/"]
     # dirs = ["../spc_L3/"]
     # dirs = ["../spc_HL1/"]
     # dirs = ["../spc_HL2/"]
@@ -1227,17 +1318,20 @@ if __name__ == "__main__":
     # dirs = ["../RTX/RTX_A0500/"]
     # dirs = ["../RTX/RTX_A1000/"]
 
+    # Random seed is preset or random, depends on weither you want the same results or not.
+    # Note: even if the seed is set, maybe it won't be enough to reproduce the results since the partitioner may use its own.
     if RANDOM_SEED == 0:
         RANDOM_SEED = random.random()
     random.seed(RANDOM_SEED)
     print "Seed: " + str(RANDOM_SEED)
 
+    # Initialize lists to be used later.
     edgeWeightTypesStr = list()
     vertexWeightTypesStr = list()
     initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr)
 
     graph = Graph()
-    clusterCount = 500
+    clusterCount = 500 # Ken's cluster count. Used if CLUSTER_INPUT_TYPE == 1
 
     for mydir in dirs:
 
@@ -1257,11 +1351,14 @@ if __name__ == "__main__":
             memoryBlocksFile = mydir + "bb.out"
             # memoryBlocksFile = mydir + "1.bb.rpt"
 
+            # Extract clusters
             if CLUSTER_INPUT_TYPE == 0:
                 graph.ReadClusters(clustersAreaFile, 14, 2)
             elif CLUSTER_INPUT_TYPE == 1:
                 graph.ReadClusters(clustersAreaFile, 0, 0)
 
+
+            # Extract cluster instances
             t0 = time.time()
             graph.readClustersInstances(clustersInstancesFile, 0, 0)
             t1 = time.time()
@@ -1298,25 +1395,45 @@ if __name__ == "__main__":
 
         for edgeWeightType in xrange(0, len(edgeWeightTypesStr)):
             for vertexWeightType in xrange(0, len(vertexWeightTypesStr)):
-                metisInput = mydir + "metis_" + edgeWeightTypesStr[edgeWeightType] + \
-                    "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr"
-                metisPartitionFile = metisInput + ".part.2"
-                partitionDirectivesFile = metisInput + ".tcl"
+                if ALGO == 0: # METIS
+                    metisInput = mydir + "metis_" + edgeWeightTypesStr[edgeWeightType] + \
+                        "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr"
+                    metisPartitionFile = metisInput + ".part.2"
+                    partitionDirectivesFile = metisInput + ".tcl"
 
-                print "============================================================="
-                print "> Edge weight: " + edgeWeightTypesStr[edgeWeightType]
-                print "> Vertex weight: " + vertexWeightTypesStr[vertexWeightType]
-                print "============================================================="
+                    print "============================================================="
+                    print "> Edge weight: " + edgeWeightTypesStr[edgeWeightType]
+                    print "> Vertex weight: " + vertexWeightTypesStr[vertexWeightType]
+                    print "============================================================="
 
-                graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
-                graph.GraphPartition(metisInput)
-                graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile)
-                graph.extractPartitions(partitionDirectivesFile)
-                graph.computePartitionArea()
-                graph.computePartitionPower()
-                if MANUAL_ASYMMETRY:
-                    graph.manualOverride()
-                paritionFiles.append(metisPartitionFile)
-        graph.dumpClusters()
+                    graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
+                    graph.GraphPartition(metisInput)
+                    graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile)
+                    graph.extractPartitions(partitionDirectivesFile)
+                    graph.computePartitionArea()
+                    graph.computePartitionPower()
+                    if MANUAL_ASYMMETRY:
+                        graph.manualOverride()
+                    paritionFiles.append(metisPartitionFile)
+
+                elif ALGO == 1: # PaToH
+                    patohInput = mydir + "patoh_" + edgeWeightTypesStr[edgeWeightType] + \
+                        "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr"
+                    patohPartitionFile = patohInput + ".part.2"
+                    partitionDirectivesFile = patohInput + ".tcl"
+
+                    print "=======================PaToH================================="
+                    print "> Edge weight: " + edgeWeightTypesStr[edgeWeightType]
+                    print "> Vertex weight: " + vertexWeightTypesStr[vertexWeightType]
+                    print "============================================================="
+
+                    graph.generatePaToHInput(patohInput, edgeWeightType, vertexWeightType)
+                    graph.GraphPartitionPaToH(patohInput)
+                    graph.WritePartitionDirectives(patohPartitionFile, partitionDirectivesFile)
+                    graph.extractPartitions(partitionDirectivesFile)
+                    graph.computePartitionArea()
+                    graph.computePartitionPower()
+
+
         graph.hammingReport(paritionFiles)
         # graph.plotWeights()
