@@ -27,21 +27,21 @@ global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
 PATOH_PATH = "/home/para/Downloads/patoh/build/Linux-x86_64/"
-ALGO = 1 # 0: METIS
+ALGO = 0 # 0: METIS
          # 1: PaToH
 # EDGE_WEIGHTS_TYPES = 10
-EDGE_WEIGHTS_TYPES = 1
+EDGE_WEIGHTS_TYPES = 10
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
-THREADS = 7     # Amount of parallel process to use when building the hypergraph.
+THREADS = 1     # Amount of parallel process to use when building the hypergraph.
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
                         # 2: Custom clustering, no boundaries
 SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
                         # True: standard graph, using gpmetis
 MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
-IMPORT_HYPERGRAPH = True    # True: import the hypergraph from a previous dump,
+IMPORT_HYPERGRAPH = False    # True: import the hypergraph from a previous dump,
                             # skip the graph building directly to the partitioning.
 DUMP_FILE = 'hypergraph.dump'
 # DUMP_FILE = 'simplegraph.dump'
@@ -53,7 +53,7 @@ RANDOM_SEED = 0 # 0: no seed, pick a new one
 
 DUMMY_CLUSTER = False # Add a dummy cluster (low area, high power)
 DUMMY_NAME = "dummy_cluster"
-POWER_ASYMMETRY = 80    # [50; 100]
+POWER_ASYMMETRY = 50    # [50; 100]
                         # At 50: symmetry
                         # At 100: evrything in one partition
 MANUAL_ASYMMETRY = False # Execute a manual asymmetrisation of the power across partitions.
@@ -87,6 +87,7 @@ def printProgression(current, max):
 
 def buildHyperedges(processID, startIndex, endIndex, nets, clusters, pipe):
 
+    # TODO go back to single process to be able to profile using cProfile
     hyperedges = []
     print "in process"
     # print clusters
@@ -1305,7 +1306,7 @@ if __name__ == "__main__":
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
     # dirs=["../CCX_HL4/"]
-    dirs = ["../MPSoC/"]
+    # dirs = ["../MPSoC/"]
     # dirs = ["../spc_L3/"]
     # dirs = ["../spc_HL1/"]
     # dirs = ["../spc_HL2/"]
@@ -1317,6 +1318,8 @@ if __name__ == "__main__":
     # dirs = ["../RTX/RTX_HL2/"]
     # dirs = ["../RTX/RTX_A0500/"]
     # dirs = ["../RTX/RTX_A1000/"]
+    dirs = ["../LDPC_100/"]
+    # dirs = ["../LDPC_1000/"]
 
     # Random seed is preset or random, depends on weither you want the same results or not.
     # Note: even if the seed is set, maybe it won't be enough to reproduce the results since the partitioner may use its own.
