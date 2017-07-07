@@ -484,10 +484,19 @@ class Graph():
 
 
         print "Merging hyperedges"
+        '''
+        Merging hyperedges is looking for hyperedges with the same amount of vertices,
+        check if those are the same and if so, add the nets from the second hyperedge
+        to the first.
+        As each hyperedge needs to be compared to the n-i next ones, this part is at
+        least of complexity O(nlogn).
+        '''
         i = 0
+        duplicateCount = 0
         while i < len(self.hyperedges):
             hyperedgeA = self.hyperedges[i]
             duplicate = False
+            # TODO delete clusterAMerged. This is useless. Since we already compare A to _all_ subsequent hyperedges, there is no need to mark it as merged.
             clusterAMerged = False  # Flag set in case an hyperedgeA is merged
                                     # into an hyperedgeB.
             j = i + 1
@@ -496,28 +505,60 @@ class Graph():
                 if len(hyperedgeA.clusters) == len(hyperedgeB.clusters):
                     duplicate = True
                     k = 0
-                    # Check if all clusters in the hyperedge are the same
-                    while k < len(hyperedgeA.clusters) and duplicate:
-                        clusterA = hyperedgeA.clusters[k]
-                        clusterB = hyperedgeB.clusters[k]
-                        if clusterA.name != clusterB.name:
-                            duplicate = False
-                        else:
-                            k += 1
+                    # # Check if  all clusters in the hyperedge are the same
+                    # # TODO Work with Set instead? We could use 'issubset' and 'difference' methods
+                    # while k < len(hyperedgeA.clusters) and duplicate:
+                    #     clusterA = hyperedgeA.clusters[k]
+                    #     clusterB = hyperedgeB.clusters[k]
+                    #     if clusterA.name != clusterB.name:
+                    #         duplicate = False
+                    #     else:
+                    #         k += 1
+
+                    clustersA = Set()
+                    clustersB = Set()
+                    for cluster in hyperedgeA.clusters:
+                        clustersA.add(cluster.name)
+                    for cluster in hyperedgeB.clusters:
+                        clustersB.add(cluster.name)
+
+                    if not clustersA.symmetric_difference(clustersB):
+                        duplicate = True
+
+
                     if duplicate:
                         # Append the net from hyperedgeB to hyperedgeA.
-                        # At this point, hyperedgeB only has one edge.
+                        # At this point, hyperedgeB only has one edge,
+                        # because it has not been merged with anything
+                        # and only merged hyperedges can have more than
+                        # one edge.
+                        duplicateCount += 1
                         hyperedgeA.addNet(hyperedgeB.nets[0])
                         hyperedgeA.connectivity += 1
                         del self.hyperedges[j]
+                        # clusterAMerged = True
                     else:
                         j += 1
+
+                # if not hyperedgeA.clusters.difference(hyperedgeB.clusters):
+                #     # Append the net from hyperedgeB to hyperedgeA.
+                #     # At this point, hyperedgeB only has one edge,
+                #     # because it has not been merged with anything
+                #     # and only merged hyperedges can have more than
+                #     # one edge.
+                #     # TODO too many duplicates and too slow. Check is those are real duplicates.
+                #     # TODO if set comparison is too slow because of object references, maybe store a parallel set with only the cluster ID.
+                #     duplicateCount += 1
+                #     hyperedgeA.addNet(hyperedgeB.nets[0])
+                #     hyperedgeA.connectivity += 1
+                #     del self.hyperedges[j]
+
 
                 else:
                     j += 1
 
             # If hyperedgeA has not been merged, inspect the next one.
-            # Otherwise, hyperedgeA has been deleted and all the following
+            # Otherwise, hyperedgeB has been deleted and all the following
             # elements have been shifted, thus no need to increment the index.
             if not clusterAMerged:
                 i += 1
@@ -525,6 +566,8 @@ class Graph():
             progression = printProgression(i, len(self.hyperedges))
             if progression != "":
                 print progression
+
+        print "Duplicates: " + str(duplicateCount)
 
         if SIMPLE_GRAPH:
             print "Prepare simple graph"
@@ -1230,7 +1273,8 @@ class Cluster:
 class Hyperedge:
     def __init__(self):
         self.nets = [] # list of Nets
-        self.clusters = [] # list of Clusters
+        self.clusters = [] # list of Clusters # TODO turn into Set
+        # self.clusters = Set()
         self.weights = []   # [0] = Number of wires
                             # [1] = Wire length
                             # [2] = 1/number of wires
@@ -1250,6 +1294,7 @@ class Hyperedge:
 
     def addCluster(self, cluster):
         self.clusters.append(cluster)
+        # self.clusters.add(cluster)
 
     def setWeight(self, index, weight):
         self.weights[index] = weight
@@ -1331,7 +1376,7 @@ if __name__ == "__main__":
     # dirs=["../CCX_HL1/"]
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
-    # dirs=["../CCX_HL4/"]
+    dirs=["../CCX_HL4/"]
     # dirs = ["../MPSoC/"]
     # dirs = ["../spc_L3/"]
     # dirs = ["../spc_HL1/"]
@@ -1344,7 +1389,7 @@ if __name__ == "__main__":
     # dirs = ["../RTX/RTX_HL2/"]
     # dirs = ["../RTX/RTX_A0500/"]
     # dirs = ["../RTX/RTX_A1000/"]
-    dirs = ["../LDPC_100/"]
+    # dirs = ["../LDPC_100/"]
     # dirs = ["../LDPC_1000/"]
 
     # Random seed is preset or random, depends on weither you want the same results or not.
@@ -1382,8 +1427,8 @@ if __name__ == "__main__":
 
             # Extract clusters
             if CLUSTER_INPUT_TYPE == 0:
-                # graph.ReadClusters(clustersAreaFile, 14, 2) # Spyglass
-                graph.ReadClusters(clustersAreaFile, 1, 0) # def_parser
+                graph.ReadClusters(clustersAreaFile, 14, 2) # Spyglass
+                # graph.ReadClusters(clustersAreaFile, 1, 0) # def_parser
             elif CLUSTER_INPUT_TYPE == 1:
                 graph.ReadClusters(clustersAreaFile, 0, 0)
 
