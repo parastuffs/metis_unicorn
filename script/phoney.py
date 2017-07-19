@@ -31,7 +31,7 @@ PATOH_PATH = "/home/para/Downloads/patoh/build/Linux-x86_64/"
 ALGO = 0 # 0: METIS
          # 1: PaToH
 # EDGE_WEIGHTS_TYPES = 10
-EDGE_WEIGHTS_TYPES = 10
+EDGE_WEIGHTS_TYPES = 1
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
@@ -491,8 +491,12 @@ class Graph():
         As each hyperedge needs to be compared to the n-i next ones, this part is at
         least of complexity O(nlogn).
         '''
+        print "We begin with " + str(len(self.hyperedges)) + " hyperedges."
         i = 0
         duplicateCount = 0
+        errorCount = 0
+        dumpDuplicates = ""
+        dumpUniques = ""
         while i < len(self.hyperedges):
             hyperedgeA = self.hyperedges[i]
             duplicate = False
@@ -503,8 +507,10 @@ class Graph():
             while j < len(self.hyperedges) and not clusterAMerged:
                 hyperedgeB = self.hyperedges[j]
                 if len(hyperedgeA.clusters) == len(hyperedgeB.clusters):
-                    duplicate = True
-                    k = 0
+
+                    ### ALGO A ###
+                    # duplicate = True
+                    # k = 0
                     # # Check if  all clusters in the hyperedge are the same
                     # # TODO Work with Set instead? We could use 'issubset' and 'difference' methods
                     # while k < len(hyperedgeA.clusters) and duplicate:
@@ -515,15 +521,66 @@ class Graph():
                     #     else:
                     #         k += 1
 
-                    clustersA = Set()
-                    clustersB = Set()
-                    for cluster in hyperedgeA.clusters:
-                        clustersA.add(cluster.name)
-                    for cluster in hyperedgeB.clusters:
-                        clustersB.add(cluster.name)
+                    ### ALGO B ###
+                    # duplicate = False
+                    # clustersA = Set()
+                    # clustersB = Set()
+                    # for cluster in hyperedgeA.clusters:
+                    #     clustersA.add(cluster.name)
+                    # for cluster in hyperedgeB.clusters:
+                    #     clustersB.add(cluster.name)
 
-                    if not clustersA.symmetric_difference(clustersB):
-                        duplicate = True
+                    # setsDifference = clustersA.symmetric_difference(clustersB)
+                    # if not setsDifference:
+                    #     duplicate = True
+
+                    ### Algo C ###
+                    duplicate = True
+                    for clusterA in hyperedgeA.clusters:
+                        nameFound = False
+                        for clusterB in hyperedgeB.clusters:
+                            if clusterA.name == clusterB.name:
+                                nameFound = True
+                        if not nameFound:
+                            duplicate = False
+                            break
+
+
+                    # if duplicate:
+                    #     # Check if the duplicate is correct
+                    #     if len(hyperedgeA.clusters) != len(hyperedgeB.clusters):
+                    #         print "False duplicate: different length."
+                    #     else:
+                    #         error = False
+                    #         for clusterA in hyperedgeA.clusters:
+                    #             nameFound = False
+                    #             for clusterB in hyperedgeB.clusters:
+                    #                 if clusterA.name == clusterB.name:
+                    #                     nameFound = True
+                    #             if not nameFound:
+                    #                 error = True
+                    #         if error:
+                    #             errorCount += 1
+                    #             print "False duplicate: different cluster name."
+                    #             print "Cluster A: "
+                    #             for cluster in hyperedgeA.clusters:
+                    #                 print cluster.name
+                    #             if clustersA != None:
+                    #                 print "Set: " + str(clustersA)
+                    #             print "Cluster B: "
+                    #             for cluster in hyperedgeB.clusters:
+                    #                 print cluster.name
+                    #             if clustersB != None:
+                    #                 print "Set: " + str(clustersB)
+                    #             print "Python thought the difference was " + str(setsDifference) + " which it considered empty = " + str(bool(not setsDifference))
+
+                    #     # Dump the duplicates
+                    #     for cluster in hyperedgeA.clusters:
+                    #         dumpDuplicates += str(cluster.name) + " "
+                    #     dumpDuplicates += "\n"
+                    #     for cluster in hyperedgeB.clusters:
+                    #         dumpDuplicates += str(cluster.name) + " "
+                    #     dumpDuplicates += "\n"
 
 
                     if duplicate:
@@ -540,13 +597,12 @@ class Graph():
                     else:
                         j += 1
 
-                # if not hyperedgeA.clusters.difference(hyperedgeB.clusters):
+                # if not hyperedgeA.clustersNames.symmetric_difference(hyperedgeB.clustersNames):
                 #     # Append the net from hyperedgeB to hyperedgeA.
                 #     # At this point, hyperedgeB only has one edge,
                 #     # because it has not been merged with anything
                 #     # and only merged hyperedges can have more than
                 #     # one edge.
-                #     # TODO too many duplicates and too slow. Check is those are real duplicates.
                 #     # TODO if set comparison is too slow because of object references, maybe store a parallel set with only the cluster ID.
                 #     duplicateCount += 1
                 #     hyperedgeA.addNet(hyperedgeB.nets[0])
@@ -568,6 +624,18 @@ class Graph():
                 print progression
 
         print "Duplicates: " + str(duplicateCount)
+        print "Error: " + str(errorCount)
+        print "We end up with " + str(len(self.hyperedges)) + " hyperedges."
+
+        # for hyperedge in self.hyperedges:
+        #     for cluster in hyperedge.clusters:
+        #         dumpUniques += str(cluster.name) + " "
+        #     dumpUniques += "\n"
+
+        # with open("duplicates.dump", 'w') as file:
+        #     file.write(dumpDuplicates)
+        # with open("non-duplicates.dump", 'w') as f:
+        #     f.write(dumpUniques)
 
         if SIMPLE_GRAPH:
             print "Prepare simple graph"
@@ -830,7 +898,7 @@ class Graph():
         call(command.split())
 
 
-    def WritePartitionDirectives(self, metisFileIn, metisFileOut):
+    def WritePartitionDirectives(self, metisFileIn, metisFileOut, gatePerDieFile):
         '''
         Create the partition directives in .tcl files.
         This is the final output telling which module (cluster) is going on which die.
@@ -840,6 +908,7 @@ class Graph():
         try:
             fOut = open(metisFileOut, "w")
             fIn = open(metisFileIn, "r")
+            fOutGates = open(gatePerDieFile, 'w')
         except IOError as e:
             print "Can't open file"
             return False
@@ -860,6 +929,7 @@ class Graph():
 
         for i, cluster in enumerate(self.clusters):
             s = ""
+            sInst = ""
             # Comment the dummy cluster out.
             if cluster.name == DUMMY_NAME:
                 s += "#"
@@ -874,9 +944,14 @@ class Graph():
             if ALGO==1:
                 s+= "\n"
 
+            for instance in cluster.instances.keys():
+                sInst += str(instance) + " " + str(data[i])
+
             fOut.write(s)
+            fOutGates.write(sInst)
         fOut.close()
         fIn.close()
+        fOutGates.close()
         print "Done!"
         # print "<---------------------------------------------------\n"
 
@@ -1275,6 +1350,7 @@ class Hyperedge:
         self.nets = [] # list of Nets
         self.clusters = [] # list of Clusters # TODO turn into Set
         # self.clusters = Set()
+        self.clustersNames = Set()
         self.weights = []   # [0] = Number of wires
                             # [1] = Wire length
                             # [2] = 1/number of wires
@@ -1295,6 +1371,7 @@ class Hyperedge:
     def addCluster(self, cluster):
         self.clusters.append(cluster)
         # self.clusters.add(cluster)
+        self.clustersNames.add(cluster.name)
 
     def setWeight(self, index, weight):
         self.weights[index] = weight
@@ -1376,7 +1453,7 @@ if __name__ == "__main__":
     # dirs=["../CCX_HL1/"]
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
-    dirs=["../CCX_HL4/"]
+    # dirs=["../CCX_HL4/"]
     # dirs = ["../MPSoC/"]
     # dirs = ["../spc_L3/"]
     # dirs = ["../spc_HL1/"]
@@ -1389,7 +1466,7 @@ if __name__ == "__main__":
     # dirs = ["../RTX/RTX_HL2/"]
     # dirs = ["../RTX/RTX_A0500/"]
     # dirs = ["../RTX/RTX_A1000/"]
-    # dirs = ["../LDPC_100/"]
+    dirs = ["../LDPC_100/"]
     # dirs = ["../LDPC_1000/"]
 
     # Random seed is preset or random, depends on weither you want the same results or not.
@@ -1427,8 +1504,8 @@ if __name__ == "__main__":
 
             # Extract clusters
             if CLUSTER_INPUT_TYPE == 0:
-                graph.ReadClusters(clustersAreaFile, 14, 2) # Spyglass
-                # graph.ReadClusters(clustersAreaFile, 1, 0) # def_parser
+                # graph.ReadClusters(clustersAreaFile, 14, 2) # Spyglass
+                graph.ReadClusters(clustersAreaFile, 1, 0) # def_parser
             elif CLUSTER_INPUT_TYPE == 1:
                 graph.ReadClusters(clustersAreaFile, 0, 0)
 
@@ -1475,6 +1552,7 @@ if __name__ == "__main__":
                         "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr"
                     metisPartitionFile = metisInput + ".part.2"
                     partitionDirectivesFile = metisInput + ".tcl"
+                    gatePerDieFile = metisInput + ".part"
 
                     print "============================================================="
                     print "> Edge weight: " + edgeWeightTypesStr[edgeWeightType]
@@ -1483,7 +1561,7 @@ if __name__ == "__main__":
 
                     graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartition(metisInput)
-                    graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile)
+                    graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile, gatePerDieFile)
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
