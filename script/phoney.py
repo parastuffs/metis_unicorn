@@ -41,7 +41,7 @@ CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 2: Custom clustering, no boundaries
 SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
                         # True: standard graph, using gpmetis
-MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
+MEMORY_BLOCKS = True   # True if there are memory blocks (bb.out)
 IMPORT_HYPERGRAPH = False    # True: import the hypergraph from a previous dump,
                             # skip the graph building directly to the partitioning.
 DUMP_FILE = 'hypergraph.dump'
@@ -146,7 +146,7 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
         if len(net.clusters) > 1:
             if SIMPLE_GRAPH:
                 # Do smth
-                print "Simple graph"
+                print "Simple graph NOT IMPLEMENTED!"
             else:
                 hyperedge = Hyperedge()
                 for cluster in net.clusters:
@@ -332,14 +332,17 @@ class Graph():
             #[4]: physical area
             #[10]: instance
             blockRow = line.split()
-            # print blockRow
+            print blockRow
             if len(line) > 0:
                 if CLUSTER_INPUT_TYPE == 0:
                     memoryBlock = Cluster(blockRow[10], existingClustersCount + blockCount, True)
                     blockCount += 1
                     moduleArea = float(blockRow[4])
                     memoryBlock.setArea(moduleArea)
-                    memoryBlock.addInstance(blockRow[10])
+                    instance = Instance(blockRow[10])
+                    instance.addCluster(memoryBlock) # When we create an Instance, we need to add the cluster it belongs to (needed by the nets for the buildHyperedge).
+                    self.instances[instance.name] = instance
+                    memoryBlock.addInstance(instance)
                     self.clusters.append(memoryBlock)
 
                     for j in xrange(1, int(blockRow[2])):
@@ -349,10 +352,15 @@ class Graph():
                         memoryBlock = Cluster(subBlockRow[1], existingClustersCount + blockCount, True)
                         blockCount += 1
                         memoryBlock.setArea(moduleArea)
-                        memoryBlock.addInstance(subBlockRow[1])
+                        instance = Instance(subBlockRow[1])
+                        instance.addCluster(memoryBlock)
+                        self.instances[instance.name] = instance
+                        memoryBlock.addInstance(instance)
                         self.clusters.append(memoryBlock)
 
                 elif CLUSTER_INPUT_TYPE == 1:
+                    # TODO 2017-07-20 this is probably broken since we changed the data structures inside the classes
+                    # in commit 493fb6aa2aa12f8f681adfebe8a3c9c8b3d320db
                     moduleArea = float(blockRow[4])
                     k = 0
                     found = False
@@ -446,7 +454,7 @@ class Graph():
                     # TODO add a verification that the instance is indeed in the class instances dictionary.
                     instance = self.instances.get(instanceName)
                     if instance is None:
-                        print instanceName
+                        print str(instanceName) + " is not recognized as an instance."
                     instance.addNet(self.nets[netID])
                     self.nets[netID].addInstance(instance)
                     self.nets[netID].addCluster(instance.cluster)
@@ -1422,14 +1430,14 @@ if __name__ == "__main__":
     # dirs = ["../spc_HL1/"]
     # dirs = ["../spc_HL2/"]
     # dirs = ["../SPC/spc_HL3/"]
-    # dirs = ["../SPC/spc_HL2/"]
+    dirs = ["../SPC/spc_HL2/"]
     # dirs = ["../CCX_Auto0500/"]
     # dirs = ["../CCX_Auto1000/"]
     # dirs = ["../RTX/RTX_HL3/"]
     # dirs = ["../RTX/RTX_HL2/"]
     # dirs = ["../RTX/RTX_A0500/"]
     # dirs = ["../RTX/RTX_A1000/"]
-    dirs = ["../LDPC_100/"]
+    # dirs = ["../LDPC_100/"]
     # dirs = ["../LDPC_1000/"]
 
     # Random seed is preset or random, depends on weither you want the same results or not.
@@ -1467,8 +1475,8 @@ if __name__ == "__main__":
 
             # Extract clusters
             if CLUSTER_INPUT_TYPE == 0:
-                # graph.ReadClusters(clustersAreaFile, 14, 2) # Spyglass
-                graph.ReadClusters(clustersAreaFile, 1, 0) # def_parser
+                graph.ReadClusters(clustersAreaFile, 14, 2) # Spyglass
+                # graph.ReadClusters(clustersAreaFile, 1, 0) # def_parser
             elif CLUSTER_INPUT_TYPE == 1:
                 graph.ReadClusters(clustersAreaFile, 0, 0)
 
