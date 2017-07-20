@@ -508,44 +508,21 @@ class Graph():
                 hyperedgeB = self.hyperedges[j]
                 if len(hyperedgeA.clusters) == len(hyperedgeB.clusters):
 
-                    ### ALGO A ###
-                    # duplicate = True
-                    # k = 0
-                    # # Check if  all clusters in the hyperedge are the same
-                    # # TODO Work with Set instead? We could use 'issubset' and 'difference' methods
-                    # while k < len(hyperedgeA.clusters) and duplicate:
-                    #     clusterA = hyperedgeA.clusters[k]
-                    #     clusterB = hyperedgeB.clusters[k]
-                    #     if clusterA.name != clusterB.name:
-                    #         duplicate = False
-                    #     else:
-                    #         k += 1
-
-                    ### ALGO B ###
-                    # duplicate = False
-                    # clustersA = Set()
-                    # clustersB = Set()
-                    # for cluster in hyperedgeA.clusters:
-                    #     clustersA.add(cluster.name)
-                    # for cluster in hyperedgeB.clusters:
-                    #     clustersB.add(cluster.name)
-
-                    # setsDifference = clustersA.symmetric_difference(clustersB)
-                    # if not setsDifference:
-                    #     duplicate = True
-
-                    ### Algo C ###
+                    # Find duplicates
                     duplicate = True
                     for clusterA in hyperedgeA.clusters:
                         nameFound = False
                         for clusterB in hyperedgeB.clusters:
                             if clusterA.name == clusterB.name:
                                 nameFound = True
+                                break
                         if not nameFound:
                             duplicate = False
                             break
 
 
+                    # Check if the found duplicates are correct.
+                    # This can be used as debug.
                     # if duplicate:
                     #     # Check if the duplicate is correct
                     #     if len(hyperedgeA.clusters) != len(hyperedgeB.clusters):
@@ -597,18 +574,6 @@ class Graph():
                     else:
                         j += 1
 
-                # if not hyperedgeA.clustersNames.symmetric_difference(hyperedgeB.clustersNames):
-                #     # Append the net from hyperedgeB to hyperedgeA.
-                #     # At this point, hyperedgeB only has one edge,
-                #     # because it has not been merged with anything
-                #     # and only merged hyperedges can have more than
-                #     # one edge.
-                #     # TODO if set comparison is too slow because of object references, maybe store a parallel set with only the cluster ID.
-                #     duplicateCount += 1
-                #     hyperedgeA.addNet(hyperedgeB.nets[0])
-                #     hyperedgeA.connectivity += 1
-                #     del self.hyperedges[j]
-
 
                 else:
                     j += 1
@@ -624,7 +589,7 @@ class Graph():
                 print progression
 
         print "Duplicates: " + str(duplicateCount)
-        print "Error: " + str(errorCount)
+        print "Errors: " + str(errorCount)
         print "We end up with " + str(len(self.hyperedges)) + " hyperedges."
 
         # for hyperedge in self.hyperedges:
@@ -1348,8 +1313,7 @@ class Cluster:
 class Hyperedge:
     def __init__(self):
         self.nets = [] # list of Nets
-        self.clusters = [] # list of Clusters # TODO turn into Set
-        # self.clusters = Set()
+        self.clusters = [] # list of Clusters
         self.clustersNames = Set()
         self.weights = []   # [0] = Number of wires
                             # [1] = Wire length
@@ -1370,7 +1334,6 @@ class Hyperedge:
 
     def addCluster(self, cluster):
         self.clusters.append(cluster)
-        # self.clusters.add(cluster)
         self.clustersNames.add(cluster.name)
 
     def setWeight(self, index, weight):
