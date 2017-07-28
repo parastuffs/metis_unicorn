@@ -140,9 +140,6 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
         #         hyperedge.addNet(net)
         #         hyperedges.append(hyperedge)
 
-
-
-
         if len(net.clusters) > 1:
             if SIMPLE_GRAPH:
                 # Do smth
@@ -158,7 +155,6 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
         if progression != "":
             print progression
         i += 1
-
 
     return hyperedges
 
@@ -332,7 +328,6 @@ class Graph():
             #[4]: physical area
             #[10]: instance
             blockRow = line.split()
-            print blockRow
             if len(line) > 0:
                 if CLUSTER_INPUT_TYPE == 0:
                     memoryBlock = Cluster(blockRow[10], existingClustersCount + blockCount, True)
@@ -472,11 +467,40 @@ class Graph():
         print "Building hyperedges"
 
         # print self.clusters
+
+        # processes = []
+        # pipes = []
+        # print "Before processes"
+        # # print self.clusters
+
+        # for i in xrange(0, THREADS):
+        #     parent_pipe, child_pipe = Pipe()
+        #     pipes.append(parent_pipe)
+        #     process = Process(target=buildHyperedges, args=(i, \
+        #         i * len(self.nets) / THREADS, \
+        #         (i + 1) * len(self.nets) / THREADS, \
+        #         self.nets, \
+        #         self.clusters, \
+        #         child_pipe,))
+        #     process.start()
+        #     processes.append(process)
+
+        # for i, pipe in enumerate(pipes):
+        #     print "Waiting pipe from process " + str(i)
+        #     hyperedges = pipe.recv()
+        #     print "Pipe received"
+        #     for hyperedge in hyperedges:
+        #         self.hyperedges.append(hyperedge)
+
+        # for process in processes:
+        #     process.join()
+
+
         hyperedges = buildHyperedges(0, len(self.nets), self.nets, self.clusters)
 
-        # TODO is this loop necessary? If it is, merge with following loop.
-        for hyperedge in hyperedges:
-            self.hyperedges.append(hyperedge)
+        # # TODO is this loop necessary? If it is, merge with following loop.
+        # for hyperedge in hyperedges:
+        #     self.hyperedges.append(hyperedge)
 
 
 
