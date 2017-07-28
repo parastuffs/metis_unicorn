@@ -87,7 +87,6 @@ def printProgression(current, max):
 
 
 def buildHyperedges(startIndex, endIndex, nets, clusters):
-    # TODO add parameter: dictionary of instances (or the Graph object?) => May not be necessary if we have a Cluster reference inside the Net object
 
     hyperedges = []
     print "in process"
@@ -95,50 +94,6 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
     i = startIndex
     while i < endIndex:
         net = nets[i]
-        # connectedClusters = list() # List of clusters.
-        # connectedClustersID = list() # List of the ID of connected clusters.
-
-        # # Now, for each net, we get its list of instances.
-        # for netInstance in net.instances: # netInstance are Instance object.
-
-        #     # And for each instance in the net, we check to which cluster
-        #     # that particular instance belongs.
-        #     for cluster in clusters:
-        #         # Try to find the instance from the net in the cluster
-        #         if cluster.searchInstance(netInstance):
-        #             # If found, see if the cluster has already been added
-        #             # to connectedClusters.
-        #             if cluster.ID not in connectedClustersID:
-        #                 connectedClusters.append(cluster)
-        #                 connectedClustersID.append(cluster.ID)
-        #             # j = 0
-        #             # clusterFound = False
-        #             # while j < len(connectedClusters) and not clusterFound:
-        #             #     if connectedClusters[j].ID == cluster.ID:
-        #             #         clusterFound = True
-        #             #     else:
-        #             #         j += 1
-        #             # if not clusterFound:
-        #             #     connectedClusters.append(cluster)
-
-        # # Append the list A of connected clusters to the list B of hyperedges
-        # # only if there are more than one cluster in list A.
-        # if len(connectedClusters) > 1:
-        #     if SIMPLE_GRAPH:
-        #         for k in xrange(0,len(connectedClusters)):
-        #             for l in xrange(k + 1, len(connectedClusters)):
-        #                 hyperedge = Hyperedge()
-        #                 hyperedge.addCluster(connectedClusters[k])
-        #                 hyperedge.addCluster(connectedClusters[l])
-        #                 hyperedge.addNet(net)
-        #                 hyperedges.append(hyperedge)
-        #     else:
-        #         hyperedge = Hyperedge()
-        #         for cluster in connectedClusters:
-        #             # print cluster
-        #             hyperedge.addCluster(cluster)
-        #         hyperedge.addNet(net)
-        #         hyperedges.append(hyperedge)
 
         if len(net.clusters) > 1:
             if SIMPLE_GRAPH:
@@ -466,44 +421,7 @@ class Graph():
     def findHyperedges(self):
         print "Building hyperedges"
 
-        # print self.clusters
-
-        # processes = []
-        # pipes = []
-        # print "Before processes"
-        # # print self.clusters
-
-        # for i in xrange(0, THREADS):
-        #     parent_pipe, child_pipe = Pipe()
-        #     pipes.append(parent_pipe)
-        #     process = Process(target=buildHyperedges, args=(i, \
-        #         i * len(self.nets) / THREADS, \
-        #         (i + 1) * len(self.nets) / THREADS, \
-        #         self.nets, \
-        #         self.clusters, \
-        #         child_pipe,))
-        #     process.start()
-        #     processes.append(process)
-
-        # for i, pipe in enumerate(pipes):
-        #     print "Waiting pipe from process " + str(i)
-        #     hyperedges = pipe.recv()
-        #     print "Pipe received"
-        #     for hyperedge in hyperedges:
-        #         self.hyperedges.append(hyperedge)
-
-        # for process in processes:
-        #     process.join()
-
-
         hyperedges = buildHyperedges(0, len(self.nets), self.nets, self.clusters)
-
-        # # TODO is this loop necessary? If it is, merge with following loop.
-        # for hyperedge in hyperedges:
-        #     self.hyperedges.append(hyperedge)
-
-
-
 
         s = ""
         for hyperedge in self.hyperedges:
