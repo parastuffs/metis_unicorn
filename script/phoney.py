@@ -30,8 +30,8 @@ METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
 PATOH_PATH = "/home/para/Downloads/patoh/build/Linux-x86_64/"
 ALGO = 0 # 0: METIS
          # 1: PaToH
-# EDGE_WEIGHTS_TYPES = 10
-EDGE_WEIGHTS_TYPES = 1
+EDGE_WEIGHTS_TYPES = 10
+# EDGE_WEIGHTS_TYPES = 1
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
@@ -109,7 +109,6 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
         progression = printProgression(i - startIndex, endIndex - startIndex)
         if progression != "":
             print progression
-            print "Hyperedges so far: " + str(len(hyperedges))
         i += 1
 
     return hyperedges
@@ -849,6 +848,7 @@ class Graph():
             # Comment the dummy cluster out.
             if cluster.name == DUMMY_NAME:
                 s += "#"
+                cluster.setPartition(0)
             if cluster.blackbox:
                 s += "add_to_die -inst    " + str(cluster.name) + \
                     " " * (maxLength - len(cluster.name)) + \
@@ -857,6 +857,9 @@ class Graph():
                 s += "add_to_die -cluster " + str(cluster.name) + \
                     " " * (maxLength - len(cluster.name)) + \
                     " -die Die" + str(data[i])
+
+            cluster.setPartition(data[i])
+
             if ALGO==1:
                 s+= "\n"
 
@@ -870,6 +873,27 @@ class Graph():
         fOutGates.close()
         print "Done!"
         # print "<---------------------------------------------------\n"
+
+
+    def extractPartitionConnectivity(self):
+        partCon = 0 # Connectivity across the partition
+        currentPart = 0 # partition of the current hyperedge
+
+        for hyperedge in self.hyperedges:
+            for i, cluster in enumerate(hyperedge.clusters):
+                if i == 0:
+                    currentPart = cluster.partition
+                else:
+                    if currentPart == cluster.partition:
+                        currentPart == cluster.partition
+                    else:
+                        partCon += hyperedge.connectivity
+                        break
+
+        print "------------- Number of nets cut by the partitioning: " + str(partCon) + " -------------"
+
+
+
 
     def dumpClusters(self):
         s = "ID -- Cluster -- Area -- Power density -- Power"
@@ -1200,6 +1224,7 @@ class Cluster:
         self.power = 0
         self.powerDensity = 0
         self.isDummy = False
+        self.partition = 0 # Partition to which the cluster belongs.
 
 
     def setBoundaries(self, lowerX, lowerY, upperX, upperY):
@@ -1259,6 +1284,9 @@ class Cluster:
 
     def setDummy(self, status):
         self.isDummy = status
+
+    def setPartition(self, part):
+        self.partition = part
 
 
 class Hyperedge:
@@ -1364,7 +1392,7 @@ if __name__ == "__main__":
 #    --------------------------------------------
     # dirs=["../input_files/"]
     # dirs=["../ccx/"]
-    dirs=["../CCX_HL1/"]
+    # dirs=["../CCX_HL1/"]
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
     # dirs=["../CCX_HL4/"]
@@ -1382,7 +1410,7 @@ if __name__ == "__main__":
     # dirs = ["../RTX/RTX_A1000/"]
     # dirs = ["../LDPC_100/"]
     # dirs = ["../LDPC_1000/"]
-    # dirs = ["../temp_design/"]
+    dirs = ["../temp_design/"]
 
     # Random seed is preset or random, depends on weither you want the same results or not.
     # Note: even if the seed is set, maybe it won't be enough to reproduce the results since the partitioner may use its own.
@@ -1419,8 +1447,8 @@ if __name__ == "__main__":
 
             # Extract clusters
             if CLUSTER_INPUT_TYPE == 0:
-                graph.ReadClusters(clustersAreaFile, 14, 2) # Spyglass
-                # graph.ReadClusters(clustersAreaFile, 1, 0) # def_parser
+                # graph.ReadClusters(clustersAreaFile, 14, 2) # Spyglass
+                graph.ReadClusters(clustersAreaFile, 1, 0) # def_parser
             elif CLUSTER_INPUT_TYPE == 1:
                 graph.ReadClusters(clustersAreaFile, 0, 0)
 
@@ -1477,6 +1505,7 @@ if __name__ == "__main__":
                     graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartition(metisInput)
                     graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile, gatePerDieFile)
+                    graph.extractPartitionConnectivity()
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
