@@ -41,7 +41,7 @@ CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 2: Custom clustering, no boundaries
 SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
                         # True: standard graph, using gpmetis
-MEMORY_BLOCKS = True   # True if there are memory blocks (bb.out)
+MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
 IMPORT_HYPERGRAPH = False    # True: import the hypergraph from a previous dump,
                             # skip the graph building directly to the partitioning.
 DUMP_FILE = 'hypergraph.dump'
@@ -56,7 +56,7 @@ DUMMY_CLUSTER = False # Add a dummy cluster (low area, high power)
 DUMMY_NAME = "dummy_cluster"
 POWER_ASYMMETRY = 50    # [50; 100]
                         # At 50: symmetry
-                        # At 100: evrything in one partition
+                        # At 100: everything in one partition
 MANUAL_ASYMMETRY = False # Execute a manual asymmetrisation of the power across partitions.
 
 POWER_DENSITIES = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.08, 0.05, 0.05]
@@ -109,6 +109,7 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
         progression = printProgression(i - startIndex, endIndex - startIndex)
         if progression != "":
             print progression
+            print "Hyperedges so far: " + str(len(hyperedges))
         i += 1
 
     return hyperedges
@@ -421,7 +422,7 @@ class Graph():
     def findHyperedges(self):
         print "Building hyperedges"
 
-        hyperedges = buildHyperedges(0, len(self.nets), self.nets, self.clusters)
+        self.hyperedges = buildHyperedges(0, len(self.nets), self.nets, self.clusters)
 
         s = ""
         for hyperedge in self.hyperedges:
@@ -1363,7 +1364,7 @@ if __name__ == "__main__":
 #    --------------------------------------------
     # dirs=["../input_files/"]
     # dirs=["../ccx/"]
-    # dirs=["../CCX_HL1/"]
+    dirs=["../CCX_HL1/"]
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
     # dirs=["../CCX_HL4/"]
@@ -1372,7 +1373,7 @@ if __name__ == "__main__":
     # dirs = ["../spc_HL1/"]
     # dirs = ["../spc_HL2/"]
     # dirs = ["../SPC/spc_HL3/"]
-    dirs = ["../SPC/spc_HL2/"]
+    # dirs = ["../SPC/spc_HL2/"]
     # dirs = ["../CCX_Auto0500/"]
     # dirs = ["../CCX_Auto1000/"]
     # dirs = ["../RTX/RTX_HL3/"]
@@ -1381,6 +1382,7 @@ if __name__ == "__main__":
     # dirs = ["../RTX/RTX_A1000/"]
     # dirs = ["../LDPC_100/"]
     # dirs = ["../LDPC_1000/"]
+    # dirs = ["../temp_design/"]
 
     # Random seed is preset or random, depends on weither you want the same results or not.
     # Note: even if the seed is set, maybe it won't be enough to reproduce the results since the partitioner may use its own.
