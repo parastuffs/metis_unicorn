@@ -875,7 +875,7 @@ class Graph():
         # print "<---------------------------------------------------\n"
 
 
-    def extractPartitionConnectivity(self):
+    def extractPartitionConnectivity(self, conFile, weigthType):
         partCon = 0 # Connectivity across the partition
         currentPart = 0 # partition of the current hyperedge
 
@@ -891,6 +891,8 @@ class Graph():
                         break
 
         print "------------- Number of nets cut by the partitioning: " + str(partCon) + " -------------"
+        with open(conFile, 'a') as f:
+            f.write("\n" + weigthType + " " + str(partCon))
 
 
 
@@ -1505,7 +1507,7 @@ if __name__ == "__main__":
                     graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartition(metisInput)
                     graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile, gatePerDieFile)
-                    graph.extractPartitionConnectivity()
+                    graph.extractPartitionConnectivity("connectivity_partition.txt", edgeWeightTypesStr[edgeWeightType])
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
