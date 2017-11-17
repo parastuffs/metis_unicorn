@@ -878,6 +878,7 @@ class Graph():
     def extractPartitionConnectivity(self, conFile, weigthType):
         partCon = 0 # Connectivity across the partition
         currentPart = 0 # partition of the current hyperedge
+        netCutStr = ""
 
         for hyperedge in self.hyperedges:
             for i, cluster in enumerate(hyperedge.clusters):
@@ -888,11 +889,13 @@ class Graph():
                         currentPart == cluster.partition
                     else:
                         partCon += hyperedge.connectivity
+                        for net in hyperedge.nets:
+                            netCutStr += "," + net.name
                         break
 
         print "------------- Number of nets cut by the partitioning: " + str(partCon) + " -------------"
         with open(conFile, 'a') as f:
-            f.write("\n" + weigthType + " " + str(partCon))
+            f.write(weigthType + " " + str(partCon) + " " + str(netCutStr) + "\n")
 
 
 
