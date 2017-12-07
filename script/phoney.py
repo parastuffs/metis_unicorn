@@ -22,26 +22,27 @@ from multiprocessing import Process, Pipe
 import time
 import pickle
 import random
+from sets import Set
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
 PATOH_PATH = "/home/para/Downloads/patoh/build/Linux-x86_64/"
-ALGO = 1 # 0: METIS
+ALGO = 0 # 0: METIS
          # 1: PaToH
-# EDGE_WEIGHTS_TYPES = 10
-EDGE_WEIGHTS_TYPES = 1
+EDGE_WEIGHTS_TYPES = 10
+# EDGE_WEIGHTS_TYPES = 1
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
 MAX_WEIGHT = 1000
-THREADS = 7     # Amount of parallel process to use when building the hypergraph.
+THREADS = 1     # Amount of parallel process to use when building the hypergraph.
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
                         # 2: Custom clustering, no boundaries
 SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
                         # True: standard graph, using gpmetis
 MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
-IMPORT_HYPERGRAPH = True    # True: import the hypergraph from a previous dump,
+IMPORT_HYPERGRAPH = False    # True: import the hypergraph from a previous dump,
                             # skip the graph building directly to the partitioning.
 DUMP_FILE = 'hypergraph.dump'
 # DUMP_FILE = 'simplegraph.dump'
@@ -53,9 +54,9 @@ RANDOM_SEED = 0 # 0: no seed, pick a new one
 
 DUMMY_CLUSTER = False # Add a dummy cluster (low area, high power)
 DUMMY_NAME = "dummy_cluster"
-POWER_ASYMMETRY = 80    # [50; 100]
+POWER_ASYMMETRY = 50    # [50; 100]
                         # At 50: symmetry
-                        # At 100: evrything in one partition
+                        # At 100: everything in one partition
 MANUAL_ASYMMETRY = False # Execute a manual asymmetrisation of the power across partitions.
 
 POWER_DENSITIES = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.08, 0.05, 0.05]
@@ -85,7 +86,7 @@ def printProgression(current, max):
     return progression
 
 
-def buildHyperedges(processID, startIndex, endIndex, nets, clusters, pipe):
+def buildHyperedges(startIndex, endIndex, nets, clusters):
 
     hyperedges = []
     print "in process"
@@ -93,55 +94,24 @@ def buildHyperedges(processID, startIndex, endIndex, nets, clusters, pipe):
     i = startIndex
     while i < endIndex:
         net = nets[i]
-        connectedClusters = list() # List of clusters.
 
-        # Now, for each net, we get its list of instances.
-        for netInstance in net.instances: # netInstance are Instance object.
-
-            # And for each instance in the net, we check to which cluster
-            # that particular instance belongs.
-            for cluster in clusters:
-                # Try to find the instance from the net in the cluster
-                if cluster.searchInstance(netInstance):
-                    # If found, see if the cluster has already been added
-                    # to connectedClusters.
-                    j = 0
-                    clusterFound = False
-                    while j < len(connectedClusters) and not clusterFound:
-                        if connectedClusters[j].ID == cluster.ID:
-                            clusterFound = True
-                        else:
-                            j += 1
-                    if not clusterFound:
-                        connectedClusters.append(cluster)
-
-        # Append the list A of connected clusters to the list B of hyperedges
-        # only if there are more than one cluster in list A.
-        if len(connectedClusters) > 1:
+        if len(net.clusters) > 1:
             if SIMPLE_GRAPH:
-                for k in xrange(0,len(connectedClusters)):
-                    for l in xrange(k + 1, len(connectedClusters)):
-                        hyperedge = Hyperedge()
-                        hyperedge.addCluster(connectedClusters[k])
-                        hyperedge.addCluster(connectedClusters[l])
-                        hyperedge.addNet(net)
-                        hyperedges.append(hyperedge)
+                # Do smth
+                print "Simple graph NOT IMPLEMENTED!"
             else:
                 hyperedge = Hyperedge()
-                for cluster in connectedClusters:
-                    # print cluster
+                for cluster in net.clusters:
                     hyperedge.addCluster(cluster)
                 hyperedge.addNet(net)
                 hyperedges.append(hyperedge)
 
         progression = printProgression(i - startIndex, endIndex - startIndex)
         if progression != "":
-            print "Process " + str(processID) + " " + progression
+            print progression
         i += 1
 
-
-    pipe.send(hyperedges)
-    pipe.close()
+    return hyperedges
 
 def closeEnough(target, value):
     tolerance = 0.2
@@ -167,6 +137,7 @@ class Graph():
     def __init__(self):
         self.clusters = [] # list of Cluster objects
         self.nets = [] # list of Net objects.
+        self.instances = dict() # dictionary of instances. Key: instance name
         self.hyperedges = []
         self.hyperedgeWeightsMax = []   # Maximum weight for each weight type.
                                         # Ordered by weight type.
@@ -176,6 +147,9 @@ class Graph():
         self.partitionsPower = []
         self.logfilename = "graph.log"
         call(["rm","-rf","graph.log"])
+        # TODO add a dictionary of instances. It will contain all the instances with their names as keys.
+        # It will be populated the first time we extract the instances information (let's say with the clusters).
+        # Then, when we extract the info about nets (if we began with clusters), for each instance encountered, we can look it up in the dictionary so that we can fetch its net object reference and add it to the net object.
 
     def WriteLog(self, obj):
         f = open(self.logfilename, "a")
@@ -183,6 +157,7 @@ class Graph():
         f.close()
 
     def findClusterByName(self, clusterName):
+        #TODO ain't this stupid? Should I not be using dictionary?
         found = False
         clusterID = 0
         while not found and clusterID < len(self.clusters):
@@ -259,11 +234,14 @@ class Graph():
                 if found:
                     del clusterInstancesRow[0]
                     for i, instanceName in enumerate(clusterInstancesRow):
-                        # instance = Instance(instanceName)
-                        # self.clusters[clusterID].addInstance(instance)
-                        self.clusters[clusterID].addInstance(instanceName)
+                        instance = Instance(instanceName)
+                        instance.addCluster(self.clusters[clusterID])
+                        self.instances[instanceName] = instance
+                        self.clusters[clusterID].addInstance(instance)
+                        # self.clusters[clusterID].addInstance(instanceName) 
         elif CLUSTER_INPUT_TYPE == 1:
             # line sample : add_to_cluster -inst lb/rtlc_I2820 c603
+            # TODO change this branch so that the clusters use Instance objects instead of simply their names
             for i, line in enumerate(lines):
                 line = line.strip(' \n')
                 clusterInstancesRow = line.split()
@@ -305,14 +283,16 @@ class Graph():
             #[4]: physical area
             #[10]: instance
             blockRow = line.split()
-            # print blockRow
             if len(line) > 0:
                 if CLUSTER_INPUT_TYPE == 0:
                     memoryBlock = Cluster(blockRow[10], existingClustersCount + blockCount, True)
                     blockCount += 1
                     moduleArea = float(blockRow[4])
                     memoryBlock.setArea(moduleArea)
-                    memoryBlock.addInstance(blockRow[10])
+                    instance = Instance(blockRow[10])
+                    instance.addCluster(memoryBlock) # When we create an Instance, we need to add the cluster it belongs to (needed by the nets for the buildHyperedge).
+                    self.instances[instance.name] = instance
+                    memoryBlock.addInstance(instance)
                     self.clusters.append(memoryBlock)
 
                     for j in xrange(1, int(blockRow[2])):
@@ -322,10 +302,15 @@ class Graph():
                         memoryBlock = Cluster(subBlockRow[1], existingClustersCount + blockCount, True)
                         blockCount += 1
                         memoryBlock.setArea(moduleArea)
-                        memoryBlock.addInstance(subBlockRow[1])
+                        instance = Instance(subBlockRow[1])
+                        instance.addCluster(memoryBlock)
+                        self.instances[instance.name] = instance
+                        memoryBlock.addInstance(instance)
                         self.clusters.append(memoryBlock)
 
                 elif CLUSTER_INPUT_TYPE == 1:
+                    # TODO 2017-07-20 this is probably broken since we changed the data structures inside the classes
+                    # in commit 493fb6aa2aa12f8f681adfebe8a3c9c8b3d320db
                     moduleArea = float(blockRow[4])
                     k = 0
                     found = False
@@ -416,9 +401,15 @@ class Graph():
             if self.nets[netID].name == netDataRow[0]:
                 del netDataRow[0]
                 for instanceName in netDataRow:
-                    # instance = Instance(instanceName)
-                    # self.nets[netID].addInstance(instance)
-                    self.nets[netID].addInstance(instanceName)
+                    # TODO add a verification that the instance is indeed in the class instances dictionary.
+                    instance = self.instances.get(instanceName)
+                    if instance is None:
+                        print str(instanceName) + " is not recognized as an instance."
+                    instance.addNet(self.nets[netID])
+                    self.nets[netID].addInstance(instance)
+                    self.nets[netID].addCluster(instance.cluster)
+                    # TODO add cluster reference to net from the instance
+                    # self.nets[netID].addInstance(instanceName)
                 netID += 1
             i += 1
 
@@ -430,34 +421,7 @@ class Graph():
     def findHyperedges(self):
         print "Building hyperedges"
 
-        processes = []
-        pipes = []
-        print "Before processes"
-        # print self.clusters
-
-        for i in xrange(0, THREADS):
-            parent_pipe, child_pipe = Pipe()
-            pipes.append(parent_pipe)
-            process = Process(target=buildHyperedges, args=(i, \
-                i * len(self.nets) / THREADS, \
-                (i + 1) * len(self.nets) / THREADS, \
-                self.nets, \
-                self.clusters, \
-                child_pipe,))
-            process.start()
-            processes.append(process)
-
-        for i, pipe in enumerate(pipes):
-            print "Waiting pipe from process " + str(i)
-            hyperedges = pipe.recv()
-            for hyperedge in hyperedges:
-                self.hyperedges.append(hyperedge)
-
-        for process in processes:
-            process.join()
-
-
-
+        self.hyperedges = buildHyperedges(0, len(self.nets), self.nets, self.clusters)
 
         s = ""
         for hyperedge in self.hyperedges:
@@ -470,40 +434,102 @@ class Graph():
 
 
         print "Merging hyperedges"
+        '''
+        Merging hyperedges is looking for hyperedges with the same amount of vertices,
+        check if those are the same and if so, add the nets from the second hyperedge
+        to the first.
+        As each hyperedge needs to be compared to the n-i next ones, this part is at
+        least of complexity O(nlogn).
+        '''
+        print "We begin with " + str(len(self.hyperedges)) + " hyperedges."
         i = 0
+        duplicateCount = 0
+        errorCount = 0
+        dumpDuplicates = ""
+        dumpUniques = ""
         while i < len(self.hyperedges):
             hyperedgeA = self.hyperedges[i]
             duplicate = False
+            # TODO delete clusterAMerged. This is useless. Since we already compare A to _all_ subsequent hyperedges, there is no need to mark it as merged.
             clusterAMerged = False  # Flag set in case an hyperedgeA is merged
                                     # into an hyperedgeB.
             j = i + 1
             while j < len(self.hyperedges) and not clusterAMerged:
                 hyperedgeB = self.hyperedges[j]
                 if len(hyperedgeA.clusters) == len(hyperedgeB.clusters):
+
+                    # Find duplicates
                     duplicate = True
-                    k = 0
-                    # Check if all clusters in the hyperedge are the same
-                    while k < len(hyperedgeA.clusters) and duplicate:
-                        clusterA = hyperedgeA.clusters[k]
-                        clusterB = hyperedgeB.clusters[k]
-                        if clusterA.name != clusterB.name:
+                    for clusterA in hyperedgeA.clusters:
+                        nameFound = False
+                        for clusterB in hyperedgeB.clusters:
+                            if clusterA.name == clusterB.name:
+                                nameFound = True
+                                break
+                        if not nameFound:
                             duplicate = False
-                        else:
-                            k += 1
+                            break
+
+
+                    # Check if the found duplicates are correct.
+                    # This can be used as debug.
+                    # if duplicate:
+                    #     # Check if the duplicate is correct
+                    #     if len(hyperedgeA.clusters) != len(hyperedgeB.clusters):
+                    #         print "False duplicate: different length."
+                    #     else:
+                    #         error = False
+                    #         for clusterA in hyperedgeA.clusters:
+                    #             nameFound = False
+                    #             for clusterB in hyperedgeB.clusters:
+                    #                 if clusterA.name == clusterB.name:
+                    #                     nameFound = True
+                    #             if not nameFound:
+                    #                 error = True
+                    #         if error:
+                    #             errorCount += 1
+                    #             print "False duplicate: different cluster name."
+                    #             print "Cluster A: "
+                    #             for cluster in hyperedgeA.clusters:
+                    #                 print cluster.name
+                    #             if clustersA != None:
+                    #                 print "Set: " + str(clustersA)
+                    #             print "Cluster B: "
+                    #             for cluster in hyperedgeB.clusters:
+                    #                 print cluster.name
+                    #             if clustersB != None:
+                    #                 print "Set: " + str(clustersB)
+                    #             print "Python thought the difference was " + str(setsDifference) + " which it considered empty = " + str(bool(not setsDifference))
+
+                    #     # Dump the duplicates
+                    #     for cluster in hyperedgeA.clusters:
+                    #         dumpDuplicates += str(cluster.name) + " "
+                    #     dumpDuplicates += "\n"
+                    #     for cluster in hyperedgeB.clusters:
+                    #         dumpDuplicates += str(cluster.name) + " "
+                    #     dumpDuplicates += "\n"
+
+
                     if duplicate:
                         # Append the net from hyperedgeB to hyperedgeA.
-                        # At this point, hyperedgeB only has one edge.
+                        # At this point, hyperedgeB only has one edge,
+                        # because it has not been merged with anything
+                        # and only merged hyperedges can have more than
+                        # one edge.
+                        duplicateCount += 1
                         hyperedgeA.addNet(hyperedgeB.nets[0])
                         hyperedgeA.connectivity += 1
                         del self.hyperedges[j]
+                        # clusterAMerged = True
                     else:
                         j += 1
+
 
                 else:
                     j += 1
 
             # If hyperedgeA has not been merged, inspect the next one.
-            # Otherwise, hyperedgeA has been deleted and all the following
+            # Otherwise, hyperedgeB has been deleted and all the following
             # elements have been shifted, thus no need to increment the index.
             if not clusterAMerged:
                 i += 1
@@ -511,6 +537,20 @@ class Graph():
             progression = printProgression(i, len(self.hyperedges))
             if progression != "":
                 print progression
+
+        print "Duplicates: " + str(duplicateCount)
+        print "Errors: " + str(errorCount)
+        print "We end up with " + str(len(self.hyperedges)) + " hyperedges."
+
+        # for hyperedge in self.hyperedges:
+        #     for cluster in hyperedge.clusters:
+        #         dumpUniques += str(cluster.name) + " "
+        #     dumpUniques += "\n"
+
+        # with open("duplicates.dump", 'w') as file:
+        #     file.write(dumpDuplicates)
+        # with open("non-duplicates.dump", 'w') as f:
+        #     f.write(dumpUniques)
 
         if SIMPLE_GRAPH:
             print "Prepare simple graph"
@@ -773,7 +813,7 @@ class Graph():
         call(command.split())
 
 
-    def WritePartitionDirectives(self, metisFileIn, metisFileOut):
+    def WritePartitionDirectives(self, metisFileIn, metisFileOut, gatePerDieFile):
         '''
         Create the partition directives in .tcl files.
         This is the final output telling which module (cluster) is going on which die.
@@ -783,6 +823,7 @@ class Graph():
         try:
             fOut = open(metisFileOut, "w")
             fIn = open(metisFileIn, "r")
+            fOutGates = open(gatePerDieFile, 'w')
         except IOError as e:
             print "Can't open file"
             return False
@@ -803,9 +844,11 @@ class Graph():
 
         for i, cluster in enumerate(self.clusters):
             s = ""
+            sInst = ""
             # Comment the dummy cluster out.
             if cluster.name == DUMMY_NAME:
                 s += "#"
+                cluster.setPartition(0)
             if cluster.blackbox:
                 s += "add_to_die -inst    " + str(cluster.name) + \
                     " " * (maxLength - len(cluster.name)) + \
@@ -814,14 +857,48 @@ class Graph():
                 s += "add_to_die -cluster " + str(cluster.name) + \
                     " " * (maxLength - len(cluster.name)) + \
                     " -die Die" + str(data[i])
+
+            cluster.setPartition(data[i])
+
             if ALGO==1:
                 s+= "\n"
 
+            for instance in cluster.instances.keys():
+                sInst += str(instance) + " " + str(data[i])
+
             fOut.write(s)
+            fOutGates.write(sInst)
         fOut.close()
         fIn.close()
+        fOutGates.close()
         print "Done!"
         # print "<---------------------------------------------------\n"
+
+
+    def extractPartitionConnectivity(self, conFile, weigthType):
+        partCon = 0 # Connectivity across the partition
+        currentPart = 0 # partition of the current hyperedge
+        netCutStr = ""
+
+        for hyperedge in self.hyperedges:
+            for i, cluster in enumerate(hyperedge.clusters):
+                if i == 0:
+                    currentPart = cluster.partition
+                else:
+                    if currentPart == cluster.partition:
+                        currentPart == cluster.partition
+                    else:
+                        partCon += hyperedge.connectivity
+                        for net in hyperedge.nets:
+                            netCutStr += "," + net.name
+                        break
+
+        print "------------- Number of nets cut by the partitioning: " + str(partCon) + " -------------"
+        with open(conFile, 'a') as f:
+            f.write(weigthType + " " + str(partCon) + " " + str(netCutStr) + "\n")
+
+
+
 
     def dumpClusters(self):
         s = "ID -- Cluster -- Area -- Power density -- Power"
@@ -1097,8 +1174,9 @@ class Net:
         self.name = name
         self.ID = netID
         self.wl = 0 # wire length
-        self.instances = []
+        self.instances = dict() # dictionary of instances. Key: instance name
         self.pins = 0 # number of pins
+        self.clusters = Set() # set of clusters. Having a Set is an advantage because it only containts unique objects.
 
     def setPinAmount(self, pins):
         self.pins = pins
@@ -1107,7 +1185,8 @@ class Net:
         self.wl = wl
 
     def addInstance(self, instance):
-        self.instances.append(instance)
+        self.instances[instance.name] = instance
+        # self.instances.append(instance)
 
     def searchInstance(self, instance):
         found = False
@@ -1119,12 +1198,15 @@ class Net:
             found = True
         return found
 
+    def addCluster(self, cluster):
+        self.clusters.add(cluster)
+
 
 class Cluster:
     def __init__(self, name, clusterID, blackbox):
         self.name = name
         self.ID = clusterID
-        self.instances = []
+        self.instances = dict() # dictionary of instances. Key: instance name
         self.boudndaries = [[0, 0], [0 ,0]] # [[lower X, lower U], [upper X, upper Y]] (floats)
         self.area = 0 # float
         self.weights = []   # [0] = area
@@ -1147,6 +1229,7 @@ class Cluster:
         self.power = 0
         self.powerDensity = 0
         self.isDummy = False
+        self.partition = 0 # Partition to which the cluster belongs.
 
 
     def setBoundaries(self, lowerX, lowerY, upperX, upperY):
@@ -1159,7 +1242,7 @@ class Cluster:
         """
         instance: Instance object
         """
-        self.instances.append(instance)
+        self.instances[instance.name] = instance
 
     def searchInstance(self, instance):
         # print "Searching " + instance.name + " in cluster " + self.name
@@ -1207,11 +1290,15 @@ class Cluster:
     def setDummy(self, status):
         self.isDummy = status
 
+    def setPartition(self, part):
+        self.partition = part
+
 
 class Hyperedge:
     def __init__(self):
         self.nets = [] # list of Nets
         self.clusters = [] # list of Clusters
+        self.clustersNames = Set()
         self.weights = []   # [0] = Number of wires
                             # [1] = Wire length
                             # [2] = 1/number of wires
@@ -1231,6 +1318,7 @@ class Hyperedge:
 
     def addCluster(self, cluster):
         self.clusters.append(cluster)
+        self.clustersNames.add(cluster.name)
 
     def setWeight(self, index, weight):
         self.weights[index] = weight
@@ -1242,6 +1330,14 @@ class Hyperedge:
 class Instance:
     def __init__(self, name):
         self.name = name
+        self.cluster = None # Cluster object to which this instance belongs
+        self.nets = list() # List of Net object that are connecting this instance.
+
+    def addCluster(self, cluster):
+        self.cluster = cluster
+
+    def addNet(self, net):
+        self.nets.append(net)
 
 # def initWeightsStr(mydir, metisInputFiles, paritionFiles, partitionDirectivesFiles):
 def initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr):
@@ -1305,7 +1401,7 @@ if __name__ == "__main__":
     # dirs=["../CCX_HL2/"]
     # dirs=["../CCX_HL3/"]
     # dirs=["../CCX_HL4/"]
-    dirs = ["../MPSoC/"]
+    # dirs = ["../MPSoC/"]
     # dirs = ["../spc_L3/"]
     # dirs = ["../spc_HL1/"]
     # dirs = ["../spc_HL2/"]
@@ -1317,6 +1413,9 @@ if __name__ == "__main__":
     # dirs = ["../RTX/RTX_HL2/"]
     # dirs = ["../RTX/RTX_A0500/"]
     # dirs = ["../RTX/RTX_A1000/"]
+    # dirs = ["../LDPC_100/"]
+    # dirs = ["../LDPC_1000/"]
+    dirs = ["../temp_design/"]
 
     # Random seed is preset or random, depends on weither you want the same results or not.
     # Note: even if the seed is set, maybe it won't be enough to reproduce the results since the partitioner may use its own.
@@ -1353,7 +1452,8 @@ if __name__ == "__main__":
 
             # Extract clusters
             if CLUSTER_INPUT_TYPE == 0:
-                graph.ReadClusters(clustersAreaFile, 14, 2)
+                # graph.ReadClusters(clustersAreaFile, 14, 2) # Spyglass
+                graph.ReadClusters(clustersAreaFile, 1, 0) # def_parser
             elif CLUSTER_INPUT_TYPE == 1:
                 graph.ReadClusters(clustersAreaFile, 0, 0)
 
@@ -1377,9 +1477,9 @@ if __name__ == "__main__":
             t1 = time.time()
             print "time: " + str(t1-t0)
 
-            print "Dumping the graph into " + mydir + DUMP_FILE
-            with open(mydir + DUMP_FILE, 'wb') as f:
-                pickle.dump(graph, f)
+            # print "Dumping the graph into " + mydir + DUMP_FILE
+            # with open(mydir + DUMP_FILE, 'wb') as f:
+            #     pickle.dump(graph, f)
 
         else:
             print "Loading the graph from " + mydir + DUMP_FILE
@@ -1400,6 +1500,7 @@ if __name__ == "__main__":
                         "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr"
                     metisPartitionFile = metisInput + ".part.2"
                     partitionDirectivesFile = metisInput + ".tcl"
+                    gatePerDieFile = metisInput + ".part"
 
                     print "============================================================="
                     print "> Edge weight: " + edgeWeightTypesStr[edgeWeightType]
@@ -1408,7 +1509,8 @@ if __name__ == "__main__":
 
                     graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartition(metisInput)
-                    graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile)
+                    graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile, gatePerDieFile)
+                    graph.extractPartitionConnectivity("connectivity_partition.txt", edgeWeightTypesStr[edgeWeightType])
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
