@@ -364,7 +364,8 @@ class Graph():
 
             net = Net(netDataRow[0], i)
             net.setPinAmount(int(netDataRow[1]))
-            net.setWL(int(float(netDataRow[2])) + 1)    # + 1 here to make sure
+            net.setWL(float(netDataRow[2]))
+            # net.setWL(int(float(netDataRow[2])) + 1)    # + 1 here to make sure
                                                         #we don't use a net with WL = 0
             self.nets.append(net)
             progression = printProgression(i, len(lines))
@@ -593,7 +594,7 @@ class Graph():
         else:
             s = str(len(self.hyperedges)) + " " + str(len(self.clusters)) + " 11"
             for i, hyperedge in enumerate(self.hyperedges):
-                s += "\n" + str(hyperedge.weightsNormalized[edgeWeightType]) + " "
+                s += "\n" + str(int(math.ceil(hyperedge.weightsNormalized[edgeWeightType]))) + " " # ceil to make sure it's > 0.
                 for cluster in hyperedge.clusters:
                     s += str(cluster.ID + 1) + " "  # hmetis does not like to have hyperedges
                                                     # beginning with a cluster of ID '0'.
@@ -874,11 +875,18 @@ class Graph():
         print "Done!"
         # print "<---------------------------------------------------\n"
 
+    def extractGraphNets(self):
+        totNets = 0
+        for hyperedge in self.hyperedges:
+            totNets += len(hyperedge.nets)
+        return totNets
+
 
     def extractPartitionConnectivity(self, conFile, weigthType):
         partCon = 0 # Connectivity across the partition
         currentPart = 0 # partition of the current hyperedge
         netCutStr = ""
+        graphTotNets = self.extractGraphNets()
 
         for hyperedge in self.hyperedges:
             for i, cluster in enumerate(hyperedge.clusters):
@@ -893,10 +901,51 @@ class Graph():
                             netCutStr += "," + net.name
                         break
 
-        print "------------- Number of nets cut by the partitioning: " + str(partCon) + " -------------"
+        print "------------- Number of nets cut by the partitioning: " + str(partCon) + " out of " + str(graphTotNets) + " -------------"
         with open(conFile, 'a') as f:
-            f.write(weigthType + " " + str(partCon) + " " + str(netCutStr) + "\n")
+            f.write(str(len(self.clusters)) + " clusters, " + str(graphTotNets) + " graphTotNets, "  + weigthType + " " + str(partCon) + " " + str(netCutStr) + "\n")
 
+
+    def extractTotalWL(self):
+        '''
+        Extract the total WL of the graph, not of the design.
+        The difference between them resides in the intra-cluster nets
+        that do not appear in the hypergraph.
+        '''
+
+        totLen = 0
+        for hyperedge in self.hyperedges:
+            totLen += hyperedge.getTotNetLength()
+        return totLen
+
+
+
+    def extractPartitionNetLengthCut(self, cutFile, weigthType):
+        '''
+        Extract the total length of all net cut by the partitioning and
+        write it into "cutFile".
+
+        This is done by iterating over all hyperedges.
+        for each hyperedge, we check if all its clusters are contained inside a
+        single partition. If not, we add the length of all the nets to the cut length.
+        Indeed, as soon as a node of the hyperedge is separated, it means the hyperedge
+        (and all the nets composing it) is cut.
+        '''
+        totLen = 0
+        currentPart = 0
+        graphTotLen = self.extractTotalWL()
+
+        for hyperedge in self.hyperedges:
+            for i, cluster in enumerate(hyperedge.clusters):
+                if i == 0:
+                    currentPart = cluster.partition
+                else:
+                    if currentPart != cluster.partition:
+                        totLen += hyperedge.getTotNetLength()
+                        break
+        print "><><><><><><><>< total net length cut by the partitioning: " + str(totLen) + ", out of " + str(graphTotLen)
+        with open(cutFile, 'a') as f:
+            f.write(str(len(self.clusters)) + " clusters, " + str(graphTotLen) + " graphTotLen, " + weigthType + " " + str(totLen) + "\n")
 
 
 
@@ -1173,7 +1222,7 @@ class Net:
     def __init__(self, name, netID):
         self.name = name
         self.ID = netID
-        self.wl = 0 # wire length
+        self.wl = 0.0 # wire length
         self.instances = dict() # dictionary of instances. Key: instance name
         self.pins = 0 # number of pins
         self.clusters = Set() # set of clusters. Having a Set is an advantage because it only containts unique objects.
@@ -1182,6 +1231,8 @@ class Net:
         self.pins = pins
 
     def setWL(self, wl):
+        # if wl == 0 and self.pins > 1:
+        #     print "#### STAP WL = 0: " + str(self.name)
         self.wl = wl
 
     def addInstance(self, instance):
@@ -1325,6 +1376,15 @@ class Hyperedge:
 
     def setWeightNormalized(self, index, weight):
         self.weightsNormalized[index] = weight
+
+    def getTotNetLength(self):
+        '''
+        Return the cumulated length of all nets contained inside the hyperedge.
+        '''
+        totLen = 0
+        for net in self.nets:
+            totLen += net.wl
+        return totLen
 
 
 class Instance:
@@ -1511,6 +1571,7 @@ if __name__ == "__main__":
                     graph.GraphPartition(metisInput)
                     graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile, gatePerDieFile)
                     graph.extractPartitionConnectivity("connectivity_partition.txt", edgeWeightTypesStr[edgeWeightType])
+                    graph.extractPartitionNetLengthCut("cutLength_partition.txt", edgeWeightTypesStr[edgeWeightType])
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
