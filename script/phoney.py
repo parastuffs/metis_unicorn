@@ -423,7 +423,7 @@ class Graph():
                 logger.info(progression)
 
 
-    def findHyperedges(self):
+    def findHyperedges(self, outputDir):
         logger.info("Building hyperedges")
 
         self.hyperedges = buildHyperedges(0, len(self.nets), self.nets, self.clusters)
@@ -434,7 +434,7 @@ class Graph():
             for cluster in hyperedge.clusters:
                 s += " " + str(cluster.name)
             s += "\n"
-        with open("raw_hyperedges.out", 'w') as f:
+        with open(os.path.join(outputDir, "raw_hyperedges.out"), 'w') as f:
             f.write(s)
 
 
@@ -1575,7 +1575,7 @@ if __name__ == "__main__":
             graph.readNets(netsInstances, 0, 0)
 
             t0 = time.time()
-            graph.findHyperedges()
+            graph.findHyperedges(output_dir)
             t1 = time.time()
             logger.debug("time: %s", str(t1-t0))
 
@@ -1612,8 +1612,8 @@ if __name__ == "__main__":
                     graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartition(metisInput)
                     graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile, gatePerDieFile)
-                    graph.extractPartitionConnectivity("connectivity_partition.txt", edgeWeightTypesStr[edgeWeightType])
-                    graph.extractPartitionNetLengthCut("cutLength_partition.txt", edgeWeightTypesStr[edgeWeightType])
+                    graph.extractPartitionConnectivity(os.path.join(output_dir, "connectivity_partition.txt"), edgeWeightTypesStr[edgeWeightType])
+                    graph.extractPartitionNetLengthCut(os.path.join(output_dir, "cutLength_partition.txt"), edgeWeightTypesStr[edgeWeightType])
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
