@@ -23,6 +23,10 @@ import time
 import pickle
 import random
 from sets import Set
+import os
+import datetime
+import sys, getopt
+import logging, logging.config
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
@@ -89,7 +93,7 @@ def printProgression(current, max):
 def buildHyperedges(startIndex, endIndex, nets, clusters):
 
     hyperedges = []
-    print "in process"
+    logger.debug("in process")
     # print clusters
     i = startIndex
     while i < endIndex:
@@ -98,7 +102,7 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
         if len(net.clusters) > 1:
             if SIMPLE_GRAPH:
                 # Do smth
-                print "Simple graph NOT IMPLEMENTED!"
+                logger.error("Simple graph NOT IMPLEMENTED!")
             else:
                 hyperedge = Hyperedge()
                 for cluster in net.clusters:
@@ -108,7 +112,7 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
 
         progression = printProgression(i - startIndex, endIndex - startIndex)
         if progression != "":
-            print progression
+            logger.info(progression)
         i += 1
 
     return hyperedges
@@ -168,7 +172,7 @@ class Graph():
         return found, clusterID
 
     def ReadClusters(self, filename, hrows, frows):
-        print (str("Reading clusters file: " + filename))
+        logger.info("Reading clusters file: %s", filename)
         with open(filename, 'r') as f:
             lines = f.read().splitlines()
 
@@ -212,7 +216,7 @@ class Graph():
 
     def readClustersInstances(self, filename, hrows, frows):
         # print "--------------------------------------------------->"
-        print (str("Reading clusters instances file: " + filename))
+        logger.info("Reading clusters instances file: %s", filename)
         with open(filename, 'r') as f:
             lines = f.read().splitlines()
 
@@ -251,15 +255,15 @@ class Graph():
                     if not foundInstance:
                         self.clusters[clusterID].addInstance(clusterInstancesRow[2])
                 else:
-                    print "Das ist ein Problem, cluster " + clusterInstancesRow[3] + " not found."
+                    logger.warning("Das ist ein Problem, cluster %s not found.", clusterInstancesRow[3])
                 progression = printProgression(i, len(lines))
                 if progression != "":
-                    print progression
+                    logger.info(progression)
 
 
 
     def readMemoryBlocks(self, filename, hrows, frows):
-        print (str("Reading memory blocks file: " + filename))
+        logger.info("Reading memory blocks file: %s", filename)
         with open(filename, 'r') as f:
             lines = f.read().splitlines()
 
@@ -340,11 +344,11 @@ class Graph():
             i += 1
             progression = printProgression(i, len(lines))
             if progression != "":
-                print progression
+                logger.info(progression)
 
 
     def readNetsWireLength(self, filename, hrows, frows):
-        print (str("Reading wire length nets file: " + filename))
+        logger.info("Reading wire length nets file: %s", filename)
         with open(filename, 'r') as f:
             lines = f.read().splitlines()
 
@@ -370,11 +374,11 @@ class Graph():
             self.nets.append(net)
             progression = printProgression(i, len(lines))
             if progression != "":
-                print progression
+                logger.info(progression)
 
 
     def readNets(self, filename, hrows, frows):
-        print (str("Reading nets file: " + filename))
+        logger.info("Reading nets file: %s", filename)
         with open(filename, 'r') as f:
             lines = f.read().splitlines()
 
@@ -405,7 +409,7 @@ class Graph():
                     # TODO add a verification that the instance is indeed in the class instances dictionary.
                     instance = self.instances.get(instanceName)
                     if instance is None:
-                        print str(instanceName) + " is not recognized as an instance."
+                        logger.info("%s is not recognized as an instance.", str(instanceName))
                     instance.addNet(self.nets[netID])
                     self.nets[netID].addInstance(instance)
                     self.nets[netID].addCluster(instance.cluster)
@@ -416,11 +420,11 @@ class Graph():
 
             progression = printProgression(i, len(lines))
             if progression != "":
-                print progression
+                logger.info(progression)
 
 
     def findHyperedges(self):
-        print "Building hyperedges"
+        logger.info("Building hyperedges")
 
         self.hyperedges = buildHyperedges(0, len(self.nets), self.nets, self.clusters)
 
@@ -434,7 +438,7 @@ class Graph():
             f.write(s)
 
 
-        print "Merging hyperedges"
+        logger.info("Merging hyperedges")
         '''
         Merging hyperedges is looking for hyperedges with the same amount of vertices,
         check if those are the same and if so, add the nets from the second hyperedge
@@ -442,7 +446,7 @@ class Graph():
         As each hyperedge needs to be compared to the n-i next ones, this part is at
         least of complexity O(nlogn).
         '''
-        print "We begin with " + str(len(self.hyperedges)) + " hyperedges."
+        logger.info("We begin with %s hyperedges.", str(len(self.hyperedges)))
         i = 0
         duplicateCount = 0
         errorCount = 0
@@ -537,11 +541,11 @@ class Graph():
 
             progression = printProgression(i, len(self.hyperedges))
             if progression != "":
-                print progression
+                logger.info(progression)
 
-        print "Duplicates: " + str(duplicateCount)
-        print "Errors: " + str(errorCount)
-        print "We end up with " + str(len(self.hyperedges)) + " hyperedges."
+        logger.info("Duplicates: %s", str(duplicateCount))
+        logger.info("Errors: %s", str(errorCount))
+        logger.info("We end up with %s hyperedges.", str(len(self.hyperedges)))
 
         # for hyperedge in self.hyperedges:
         #     for cluster in hyperedge.clusters:
@@ -554,7 +558,7 @@ class Graph():
         #     f.write(dumpUniques)
 
         if SIMPLE_GRAPH:
-            print "Prepare simple graph"
+            logger.info("Prepare simple graph")
             # print self.clusters
             for i, hyperedge in enumerate(self.hyperedges):
                 for k, clusterA in enumerate(hyperedge.clusters):
@@ -573,7 +577,7 @@ class Graph():
 
 
     def generateMetisInput(self, filename, edgeWeightType, vertexWeightType):
-        print "Generating METIS input file..."
+        logger.info("Generating METIS input file...")
         s = ""
         if SIMPLE_GRAPH:
             s = str(len(self.clusters)) + " " + str(len(self.hyperedges)) + " 011"
@@ -605,7 +609,7 @@ class Graph():
 
 
     def generatePaToHInput(self, filename, edgeWeightType, vertexWeightType):
-        print "Generating PaToH input file..."
+        logger.info("Generating PaToH input file...")
         s = ""
 
         # Compute the amount of 'pins' in the hypergraph.
@@ -635,7 +639,7 @@ class Graph():
 
 
     def computeHyperedgeWeights(self, normalized):
-        print "Generating weights of hyperedges."
+        logger.info("Generating weights of hyperedges.")
 
         self.hyperedgeWeightsMax = [0] * EDGE_WEIGHTS_TYPES
         for weightType in xrange(0, EDGE_WEIGHTS_TYPES):
@@ -719,7 +723,7 @@ class Graph():
 
 
     def computeVertexWeights(self):
-        print "Generating weights of vertices."
+        logger.info("Generating weights of vertices.")
         self.clusterWeightsMax = [0] * VERTEX_WEIGHTS_TYPES
         totalPower = 0
         totalNormalizedPower = 0
@@ -763,8 +767,8 @@ class Graph():
             # If we want 70/30 asymmetry, the dummy power will be
             # totalNormalizedPower * 0.4, using 40 % of one partition's power
             dummyPower = totalNormalizedPower * (POWER_ASYMMETRY - (100 - POWER_ASYMMETRY)) / 100
-            print "totalNormalizedPower: " + str(totalNormalizedPower) + \
-                ", dummyPower: " + str(dummyPower)
+            logger.info("totalNormalizedPower: %s, dummyPower: %s", 
+                str(totalNormalizedPower), str(dummyPower))
             dummy.setArea(0.1)
             dummy.setPower(dummyPower)
             dummy.setWeight(0, 0.1)
@@ -782,9 +786,9 @@ class Graph():
         with simple graphs.
         '''
 
-        print "--------------------------------------------------->"
+        logger.info("--------------------------------------------------->")
         # print "Running partition on cost: ", CostFunction
-        print "Running hmetis with " + filename
+        logger.info("Running hmetis with %s", filename)
         # call(["/Users/drago/bin/hmetis-1.5-osx-i686/hmetis",filename,"2","5","20","1","1","1","0","0"])
         # hmetis graphFile Nparts UBfactor Nruns Ctype Rtype Vcycle Reconst dbglvl
         Nparts = 2
@@ -802,14 +806,14 @@ class Graph():
             command = HMETIS_PATH + "hmetis " + filename + " " + str(Nparts) + \
                 " " + str(UBfactor) + " " + str(Nruns) + " " + str(Ctype) + " " + \
                 str(Rtype) + " " + str(Vcycle) + " " + str(Reconst) + " " + str(dbglvl)
-            print "Calling '" + command + "'"
+            logger.info("Calling '%s'", command)
         # call([HMETIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
         call(command.split())
 
 
     def GraphPartitionPaToH(self, filename):
-        print "--------------------------------------------------->"
-        print "Running PaToH with " + filename
+        logger.info("--------------------------------------------------->")
+        logger.info("Running PaToH with %s", filename)
         command = PATOH_PATH + "patoh " + filename + " 2 RA=6 UM=U OD=3"
         call(command.split())
 
@@ -820,13 +824,13 @@ class Graph():
         This is the final output telling which module (cluster) is going on which die.
         '''
         # print "--------------------------------------------------->"
-        print "Write tcl file for file: ", metisFileIn
+        logger.info("Write tcl file for file: %s", metisFileIn)
         try:
             fOut = open(metisFileOut, "w")
             fIn = open(metisFileIn, "r")
             fOutGates = open(gatePerDieFile, 'w')
         except IOError as e:
-            print "Can't open file"
+            logger.warning("Can't open file")
             return False
 
         # Find the longest cluster name first.
@@ -872,7 +876,7 @@ class Graph():
         fOut.close()
         fIn.close()
         fOutGates.close()
-        print "Done!"
+        logger.info("Done!")
         # print "<---------------------------------------------------\n"
 
     def extractGraphNets(self):
@@ -901,7 +905,8 @@ class Graph():
                             netCutStr += "," + net.name
                         break
 
-        print "------------- Number of nets cut by the partitioning: " + str(partCon) + " out of " + str(graphTotNets) + " -------------"
+        logger.info("------------- Number of nets cut by the partitioning: %s out of %s -------------", 
+            str(partCon), str(graphTotNets))
         with open(conFile, 'a') as f:
             f.write(str(len(self.clusters)) + " clusters, " + str(graphTotNets) + " graphTotNets, "  + weigthType + " " + str(partCon) + " " + str(netCutStr) + "\n")
 
@@ -943,7 +948,7 @@ class Graph():
                     if currentPart != cluster.partition:
                         totLen += hyperedge.getTotNetLength()
                         break
-        print "><><><><><><><>< total net length cut by the partitioning: " + str(totLen) + ", out of " + str(graphTotLen)
+        logger.info("><><><><><><><>< total net length cut by the partitioning: %s, out of %s", str(totLen), str(graphTotLen))
         with open(cutFile, 'a') as f:
             f.write(str(len(self.clusters)) + " clusters, " + str(graphTotLen) + " graphTotLen, " + weigthType + " " + str(totLen) + "\n")
 
@@ -1003,7 +1008,7 @@ class Graph():
         for filename in filenames:
             table += str(part) + ":\t" + filename + "\n"
             part += 1
-        print table
+        logger.info(table)
 
 
 
@@ -1016,7 +1021,7 @@ class Graph():
         for hyperedge in self.hyperedges:
             for i in xrange (0, EDGE_WEIGHTS_TYPES):
                 weights[i].append(hyperedge.weightsNormalized[i])
-        print weights[0]
+        logger.info(weights[0])
         for i in xrange(0, EDGE_WEIGHTS_TYPES):
             plt.plot(weights[i], styles[i])
         plt.show()
@@ -1038,7 +1043,7 @@ class Graph():
         for i, part in enumerate(self.partitionsArea):
             areaFraction[i] = float(part) / totalArea
 
-        print "Area: " + str(self.partitionsArea) + " " + str(areaFraction)
+        logger.info("Area: %s %s", str(self.partitionsArea), str(areaFraction))
 
 
     def computePartitionPower(self):
@@ -1059,7 +1064,7 @@ class Graph():
                 powerFraction[i] = float(part) / totalPower
 
 
-        print "Power: " + str(self.partitionsPower) + " " + str(powerFraction)
+        logger.info("Power: %s %s", str(self.partitionsPower), str(powerFraction))
 
 
     def extractPartitions(self, partitionFile):
@@ -1079,9 +1084,9 @@ class Graph():
 
     def printPartitions(self):
         for i, partition in enumerate(self.partitions):
-            print "Partition #" + str(i)
+            logger.info("Partition #%s", str(i))
             for cluster in partition:
-                print cluster.name + ", " + str(cluster.area) + ", " + str(cluster.powerDensity)
+                logger.info("%s, %s, %s", cluster.name, str(cluster.area), str(cluster.powerDensity))
 
 
     def findHighestDensityCluster(self, clusters, unmatchableClusters):
@@ -1120,7 +1125,7 @@ class Graph():
 
         # If it does not work, use the accumulation of smaller clusters.
         # if len(clusterSelection) == 0:
-        print "Looking for low density clusters"
+        logger.info("Looking for low density clusters")
         # print "areaSelection: " + str(areaSelection) + ", target area: " + str(area)
         for i, cluster in enumerate(clusters):
             # print str(cluster.powerDensity) + " " + str(cluster.area)
@@ -1170,18 +1175,18 @@ class Graph():
             lowDenClusters, lowDenArea = self.findLowDensityCluster(self.partitions[1], highDen, highDenArea)
             if closeEnough(highDenArea, lowDenArea):
                 lowDenClusters.sort()
-                print "Low density clusters: (total area: " + str(lowDenArea) + ")"
+                logger.info("Low density clusters: (total area: %s)", str(lowDenArea))
                 for id in lowDenClusters:
                     cluster = self.partitions[1][id]
-                    print "den: " + str(cluster.powerDensity) + ", area: " + str(cluster.area)
+                    logger.info("den: %s, area: %s", str(cluster.powerDensity), str(cluster.area))
 
                 # Swap the clusters
-                print "BEFORE SWAPING:"
+                logger.info("BEFORE SWAPING:")
                 for i, part in enumerate(self.partitions):
-                    print "Partition " + str(i)
-                    print part
+                    logger.info("Partition %s", str(i))
+                    logger.info(part)
                     for c in part:
-                        print c.ID
+                        logger.info(c.ID)
 
                 self.partitions[1].append(self.partitions[0][highDenCluster])
                 del self.partitions[0][highDenCluster]
@@ -1191,19 +1196,19 @@ class Graph():
                 # Delete in reversed order because when you delete an element, the
                 # others are shifted to take its place.
                 for id in reversed(lowDenClusters):
-                    print str(id)
+                    logger.info(str(id))
                     del self.partitions[1][id]
 
-                print "AFTER SWAPING:"
+                logger.info("AFTER SWAPING:")
                 for i, part in enumerate(self.partitions):
-                    print "Partition " + str(i)
+                    logger.info("Partition %s", str(i))
                     for c in part:
-                        print c.ID
+                        logger.info(c.ID)
 
             # If the area is not close enough, the high density cluster could
             # not be matched. Blacklist its ID.
             else:
-                print "High density cluster unmatchable"
+                logger.info("High density cluster unmatchable")
                 unmatchableClusters.append(self.partitions[0][highDenCluster].ID)
                 i += 1
 
@@ -1439,75 +1444,112 @@ def initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr):
 
 
 
-#----------------------------------------------------------------
-#----------------------------------------------------------------
-#----------------------------------------------------------------
+
 if __name__ == "__main__":
-#==========================================================================
-# Read rpt gen with report physical.connectivity -net_threshold 0
-#------------------------------------------------------------------------------------------------------------------------------------------------
-#SourceBlock | SourceType | SourceBlockArea | ConnectedBlock | ConnectedType | ConnectedBlockArea | E1->E2 | E2->E1 | E1-E2 | Total Connections
-#------------------------------------------------------------------------------------------------------------------------------------------------
-#   connectivity = RPTFile("4rpt.phys_conn.rpt", 34, 2)
-#   connectivity.Read()
-#==========================================================================
-# Read rpt gen with report physical.hierarchy
-#    --------------------------------------------
-#    Name | Type | Area | Inst | Cnt |  Area(%)
-#    --------------------------------------------
-    # dirs=["../input_files/"]
-    # dirs=["../ccx/"]
-    # dirs=["../CCX_HL1/"]
-    # dirs=["../CCX_HL2/"]
-    # dirs=["../CCX_HL3/"]
-    # dirs=["../CCX_HL4/"]
-    # dirs = ["../MPSoC/"]
-    # dirs = ["../spc_L3/"]
-    # dirs = ["../spc_HL1/"]
-    # dirs = ["../spc_HL2/"]
-    # dirs = ["../SPC/spc_HL3/"]
-    # dirs = ["../SPC/spc_HL2/"]
-    # dirs = ["../CCX_Auto0500/"]
-    # dirs = ["../CCX_Auto1000/"]
-    # dirs = ["../RTX/RTX_HL3/"]
-    # dirs = ["../RTX/RTX_HL2/"]
-    # dirs = ["../RTX/RTX_A0500/"]
-    # dirs = ["../RTX/RTX_A1000/"]
-    # dirs = ["../LDPC_100/"]
-    # dirs = ["../LDPC_1000/"]
-    dirs = ["../temp_design/"]
+    """
+    Usage: phoney -d <input directory>
+
+    Is no argument is given, a hardcoded default dir is used."
+    """
+
+
+    dirs = []
+    try:
+        opts, args = getopt.getopt(sys.argv[1:],"d:")
+    except getopt.GetoptError:
+        print "YO FAIL"
+    else:
+        for opt, arg in opts:
+            if opt == "-d":
+                dirs = [arg]
+
+        if dirs == []:
+            # logger.warning("No suitable directory given. Using hardcoded instead.")
+            # dirs=["../input_files/"]
+            # dirs=["../ccx/"]
+            # dirs=["../CCX_HL1/"]
+            # dirs=["../CCX_HL2/"]
+            # dirs=["../CCX_HL3/"]
+            # dirs=["../CCX_HL4/"]
+            # dirs = ["../MPSoC/"]
+            # dirs = ["../spc_L3/"]
+            # dirs = ["../spc_HL1/"]
+            # dirs = ["../spc_HL2/"]
+            # dirs = ["../SPC/spc_HL3/"]
+            # dirs = ["../SPC/spc_HL2/"]
+            # dirs = ["../CCX_Auto0500/"]
+            # dirs = ["../CCX_Auto1000/"]
+            # dirs = ["../RTX/RTX_HL3/"]
+            # dirs = ["../RTX/RTX_HL2/"]
+            # dirs = ["../RTX/RTX_A0500/"]
+            # dirs = ["../RTX/RTX_A1000/"]
+            # dirs = ["../LDPC_100/"]
+            # dirs = ["../LDPC_1000/"]
+            # dirs = ["../temp_design/"]
+            dirs = ["/home/para/dev/def_parser/2018-01-25_16-16-50/ccx_Naive_Geometric_25"]
+
+
+
+
 
     # Random seed is preset or random, depends on weither you want the same results or not.
     # Note: even if the seed is set, maybe it won't be enough to reproduce the results since the partitioner may use its own.
     if RANDOM_SEED == 0:
         RANDOM_SEED = random.random()
     random.seed(RANDOM_SEED)
-    print "Seed: " + str(RANDOM_SEED)
-
-    # Initialize lists to be used later.
-    edgeWeightTypesStr = list()
-    vertexWeightTypesStr = list()
-    initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr)
-
-    graph = Graph()
-    clusterCount = 500 # Ken's cluster count. Used if CLUSTER_INPUT_TYPE == 1
+    # print "Seed: " + str(RANDOM_SEED)
 
     for mydir in dirs:
 
+        output_dir = os.path.join(mydir, "partitions_" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        try:
+            os.makedirs(output_dir)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+
+        # Load base config from conf file.
+        logging.config.fileConfig('log.conf')
+        # Load logger from config
+        logger = logging.getLogger('default')
+        # Create new file handler
+        fh = logging.FileHandler(os.path.join(output_dir, 'phoney_' + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + '.log'))
+        # Set a format for the file handler
+        fh.setFormatter(logging.Formatter('%(asctime)s: %(message)s'))
+        # Add the handler to the logger
+        logger.addHandler(fh)
+
+
+        logger.info("Output going to %s", output_dir)
+        logger.info("Seed: %s", str(RANDOM_SEED))
+
+
+
+
+        # Initialize lists to be used later.
+        edgeWeightTypesStr = list()
+        vertexWeightTypesStr = list()
+        initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr)
+
+        graph = Graph()
+        clusterCount = 500 # Ken's cluster count. Used if CLUSTER_INPUT_TYPE == 1
+
         if not IMPORT_HYPERGRAPH:
             if CLUSTER_INPUT_TYPE == 0:
-                clustersAreaFile = mydir + "ClustersArea.out"
-                clustersInstancesFile = mydir + "ClustersInstances.out"
-            elif CLUSTER_INPUT_TYPE == 1:
-                clustersAreaFile = mydir + "test" + str(clusterCount) + ".area"
-                clustersInstancesFile = mydir + "test" + str(clusterCount) + ".tcl"
-            elif CLUSTER_INPUT_TYPE == 2:
-                clustersAreaFile = mydir + "2rpt.clusters.rpt"
-                clustersInstancesFile = mydir + "ClustersInstances.out"
+                clustersAreaFile = os.path.join(mydir, "ClustersArea.out")
+                clustersInstancesFile = os.path.join(mydir, "ClustersInstances.out")
+            # elif CLUSTER_INPUT_TYPE == 1:
+            #     clustersAreaFile = mydir + "test" + str(clusterCount) + ".area"
+            #     clustersInstancesFile = mydir + "test" + str(clusterCount) + ".tcl"
+            # elif CLUSTER_INPUT_TYPE == 2:
+            #     clustersAreaFile = mydir + "2rpt.clusters.rpt"
+            #     clustersInstancesFile = mydir + "ClustersInstances.out"
+            else:
+                logger.warning("Cluster type not supported.")
 
-            netsInstances = mydir + "InstancesPerNet.out"
-            netsWL = mydir + "WLnets.out"
-            memoryBlocksFile = mydir + "bb.out"
+            netsInstances = os.path.join(mydir, "InstancesPerNet.out")
+            netsWL = os.path.join(mydir, "WLnets.out")
+            memoryBlocksFile = os.path.join(mydir, "bb.out")
             # memoryBlocksFile = mydir + "1.bb.rpt"
 
             # Extract clusters
@@ -1522,12 +1564,12 @@ if __name__ == "__main__":
             t0 = time.time()
             graph.readClustersInstances(clustersInstancesFile, 0, 0)
             t1 = time.time()
-            print "time: " + str(t1-t0)
+            logger.debug("time: %s", str(t1-t0))
             if MEMORY_BLOCKS:
                 t0 = time.time()
                 graph.readMemoryBlocks(memoryBlocksFile, 14, 4)
                 t1 = time.time()
-                print "time: " + str(t1-t0)
+                logger.debug("time: %s", str(t1-t0))
             # Begin with the netWL file, as there are less nets there.
             graph.readNetsWireLength(netsWL, 14, 2)
             graph.readNets(netsInstances, 0, 0)
@@ -1535,15 +1577,15 @@ if __name__ == "__main__":
             t0 = time.time()
             graph.findHyperedges()
             t1 = time.time()
-            print "time: " + str(t1-t0)
+            logger.debug("time: %s", str(t1-t0))
 
             # print "Dumping the graph into " + mydir + DUMP_FILE
             # with open(mydir + DUMP_FILE, 'wb') as f:
             #     pickle.dump(graph, f)
 
         else:
-            print "Loading the graph from " + mydir + DUMP_FILE
-            with open(mydir + DUMP_FILE, 'rb') as f:
+            logger.info("Loading the graph from %s%s", mydir, DUMP_FILE)
+            with open(os.path.join(mydir, DUMP_FILE), 'rb') as f:
                 graph = pickle.load(f)
 
         edgeWeightType = 0
@@ -1551,21 +1593,21 @@ if __name__ == "__main__":
         graph.computeHyperedgeWeights(True)
         graph.computeVertexWeights()
 
-        paritionFiles = []
+        partitionFiles = []
 
         for edgeWeightType in xrange(0, len(edgeWeightTypesStr)):
             for vertexWeightType in xrange(0, len(vertexWeightTypesStr)):
                 if ALGO == 0: # METIS
-                    metisInput = mydir + "metis_" + edgeWeightTypesStr[edgeWeightType] + \
-                        "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr"
+                    metisInput = os.path.join(output_dir, "metis_" + edgeWeightTypesStr[edgeWeightType] + \
+                        "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr")
                     metisPartitionFile = metisInput + ".part.2"
                     partitionDirectivesFile = metisInput + ".tcl"
                     gatePerDieFile = metisInput + ".part"
 
-                    print "============================================================="
-                    print "> Edge weight: " + edgeWeightTypesStr[edgeWeightType]
-                    print "> Vertex weight: " + vertexWeightTypesStr[vertexWeightType]
-                    print "============================================================="
+                    logger.info("=============================================================")
+                    logger.info("> Edge weight: " + edgeWeightTypesStr[edgeWeightType])
+                    logger.info("> Vertex weight: " + vertexWeightTypesStr[vertexWeightType])
+                    logger.info("=============================================================")
 
                     graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartition(metisInput)
@@ -1577,18 +1619,18 @@ if __name__ == "__main__":
                     graph.computePartitionPower()
                     if MANUAL_ASYMMETRY:
                         graph.manualOverride()
-                    paritionFiles.append(metisPartitionFile)
+                    partitionFiles.append(metisPartitionFile)
 
                 elif ALGO == 1: # PaToH
-                    patohInput = mydir + "patoh_" + edgeWeightTypesStr[edgeWeightType] + \
-                        "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr"
+                    patohInput = os.path.join(output_dir, "patoh_" + edgeWeightTypesStr[edgeWeightType] + \
+                        "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr")
                     patohPartitionFile = patohInput + ".part.2"
                     partitionDirectivesFile = patohInput + ".tcl"
 
-                    print "=======================PaToH================================="
-                    print "> Edge weight: " + edgeWeightTypesStr[edgeWeightType]
-                    print "> Vertex weight: " + vertexWeightTypesStr[vertexWeightType]
-                    print "============================================================="
+                    logger.info("=======================PaToH=================================")
+                    logger.info("> Edge weight: " + edgeWeightTypesStr[edgeWeightType])
+                    logger.info("> Vertex weight: " + vertexWeightTypesStr[vertexWeightType])
+                    logger.info("=============================================================")
 
                     graph.generatePaToHInput(patohInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartitionPaToH(patohInput)
@@ -1598,5 +1640,5 @@ if __name__ == "__main__":
                     graph.computePartitionPower()
 
 
-        graph.hammingReport(paritionFiles)
+        graph.hammingReport(partitionFiles)
         # graph.plotWeights()
