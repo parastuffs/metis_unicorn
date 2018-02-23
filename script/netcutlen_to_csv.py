@@ -21,7 +21,7 @@ else:
 fileLines = [] #List of all the lines in the file
 csvout = ""
 i = 0
-with open("cutLength_partition.txt", 'r') as f:
+with open(infile, 'r') as f:
 	fileLines = f.readlines()
 
 '''
