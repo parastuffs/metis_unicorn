@@ -26,7 +26,7 @@ from sets import Set
 import os
 import datetime
 import sys, getopt
-import logging, logging.config
+import logging, logging.config 
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
@@ -64,6 +64,11 @@ POWER_ASYMMETRY = 50    # [50; 100]
 MANUAL_ASYMMETRY = False # Execute a manual asymmetrisation of the power across partitions.
 
 POWER_DENSITIES = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.08, 0.05, 0.05]
+
+# If True, each cluster contains only one gate.
+# In that case, we assume there are no two identicals nets
+# and there is no need to merge the corresponding hyperedges.
+ONE_TO_ONE = True
 
 def printProgression(current, max):
     progression = ""
@@ -139,14 +144,14 @@ def elementIsInList(element, theList):
 
 class Graph():
     def __init__(self):
-        self.clusters = [] # list of Cluster objects
+        self.clusters = dict() # dictionary of Cluster objects, key: cluster name
         self.nets = [] # list of Net objects.
         self.instances = dict() # dictionary of instances. Key: instance name
         self.hyperedges = []
         self.hyperedgeWeightsMax = []   # Maximum weight for each weight type.
                                         # Ordered by weight type.
         self.partitions = []    # Each element is a list of clusters (objects)
-                                # included in the corresponding cluster.
+                                # included in the corresponding partition.
         self.partitionsArea = []
         self.partitionsPower = []
         self.logfilename = "graph.log"
@@ -159,17 +164,6 @@ class Graph():
         f = open(self.logfilename, "a")
         f.write(str(obj)+"\n")
         f.close()
-
-    def findClusterByName(self, clusterName):
-        #TODO ain't this stupid? Should I not be using dictionary?
-        found = False
-        clusterID = 0
-        while not found and clusterID < len(self.clusters):
-            if self.clusters[clusterID].name == clusterName:
-                found = True
-            else:
-                clusterID += 1
-        return found, clusterID
 
     def ReadClusters(self, filename, hrows, frows):
         logger.info("Reading clusters file: %s", filename)
@@ -196,14 +190,14 @@ class Graph():
                     float(upperBounds[0]), float(upperBounds[1]))
 
                 cluster.setArea(float(clusterDataRow[5]))
-                self.clusters.append(cluster)
+                self.clusters[cluster.name] = cluster
         elif CLUSTER_INPUT_TYPE == 1:
             for i, line in enumerate(lines):
                 line = line.strip(' \n')
                 clusterDataRow = line.split()
                 cluster = Cluster(clusterDataRow[0], i, False)
                 cluster.setArea(clusterDataRow[1])
-                self.clusters.append(cluster)
+                self.clusters[cluster.name] = cluster
         elif CLUSTER_INPUT_TYPE == 2:
             for i, line in enumerate(lines):
                 line = line.strip(' \n')
@@ -211,7 +205,7 @@ class Graph():
                 cluster = Cluster(clusterDataRow[0], i, False)
 
                 cluster.setArea(float(clusterDataRow[4]))
-                self.clusters.append(cluster)
+                self.clusters[cluster.name] = cluster
 
 
     def readClustersInstances(self, filename, hrows, frows):
@@ -234,28 +228,33 @@ class Graph():
                 line = line.replace('}','')
                 # print line
                 clusterInstancesRow = line.split()
-                found, clusterID = self.findClusterByName(clusterInstancesRow[0])
-                if found:
+                try:
+                    cluster = self.clusters[clusterInstancesRow[0]]
+                except KeyError:
+                    pass
+                else:
                     del clusterInstancesRow[0]
                     for i, instanceName in enumerate(clusterInstancesRow):
                         instance = Instance(instanceName)
-                        instance.addCluster(self.clusters[clusterID])
+                        instance.addCluster(cluster)
                         self.instances[instanceName] = instance
-                        self.clusters[clusterID].addInstance(instance)
-                        # self.clusters[clusterID].addInstance(instanceName) 
+                        cluster.addInstance(instance)
+
         elif CLUSTER_INPUT_TYPE == 1:
             # line sample : add_to_cluster -inst lb/rtlc_I2820 c603
             # TODO change this branch so that the clusters use Instance objects instead of simply their names
             for i, line in enumerate(lines):
                 line = line.strip(' \n')
                 clusterInstancesRow = line.split()
-                found, clusterID = self.findClusterByName(clusterInstancesRow[3])
-                if found:
-                    foundInstance = self.clusters[clusterID].searchInstance(clusterInstancesRow[2])
-                    if not foundInstance:
-                        self.clusters[clusterID].addInstance(clusterInstancesRow[2])
-                else:
+                try:
+                    cluster = self.clusters[clusterInstancesRow[3]]
+                except KeyError:
                     logger.warning("Das ist ein Problem, cluster %s not found.", clusterInstancesRow[3])
+                else:
+                    foundInstance = cluster.searchInstance(clusterInstancesRow[2])
+                    if not foundInstance:
+                        cluster.addInstance(clusterInstancesRow[2])
+
                 progression = printProgression(i, len(lines))
                 if progression != "":
                     logger.info(progression)
@@ -297,7 +296,7 @@ class Graph():
                     instance.addCluster(memoryBlock) # When we create an Instance, we need to add the cluster it belongs to (needed by the nets for the buildHyperedge).
                     self.instances[instance.name] = instance
                     memoryBlock.addInstance(instance)
-                    self.clusters.append(memoryBlock)
+                    self.clusters[memoryBlock.name] = memoryBlock
 
                     for j in xrange(1, int(blockRow[2])):
                         i += 1
@@ -310,35 +309,30 @@ class Graph():
                         instance.addCluster(memoryBlock)
                         self.instances[instance.name] = instance
                         memoryBlock.addInstance(instance)
-                        self.clusters.append(memoryBlock)
+                        self.clusters[memoryBlock.name] = memoryBlock
 
                 elif CLUSTER_INPUT_TYPE == 1:
                     # TODO 2017-07-20 this is probably broken since we changed the data structures inside the classes
                     # in commit 493fb6aa2aa12f8f681adfebe8a3c9c8b3d320db
                     moduleArea = float(blockRow[4])
-                    k = 0
-                    found = False
-                    while k < len(self.clusters) and not found:
-                        cluster = self.clusters[k]
-                        found = cluster.searchInstance(blockRow[10])
-                        if found:
+                    for key in self.clusters:
+                        cluster = self.clusters[key]
+                        if cluster.searchInstance(blockRow[10]):
                             cluster.setArea(moduleArea)
                             cluster.blackbox = True
+                            break
                         k += 1
 
                     for j in xrange(1, int(blockRow[2])):
                         i += 1
                         line = lines[i]
                         subBlockRow = line.split()
-                        l = 0
-                        found = False
-                        while l < len(self.clusters) and not found:
-                            cluster = self.clusters[l]
-                            found = cluster.searchInstance(subBlockRow[1])
-                            if found:
+                        for key in self.clusters:
+                            cluster = self.clusters[key]
+                            if cluster.searchInstance(subBlockRow[1]):
                                 cluster.setArea(moduleArea)
                                 cluster.blackbox = True
-                            l += 1
+                                break
 
 
             i += 1
@@ -437,114 +431,116 @@ class Graph():
         with open(os.path.join(outputDir, "raw_hyperedges.out"), 'w') as f:
             f.write(s)
 
+        if not ONE_TO_ONE:
 
-        logger.info("Merging hyperedges")
-        '''
-        Merging hyperedges is looking for hyperedges with the same amount of vertices,
-        check if those are the same and if so, add the nets from the second hyperedge
-        to the first.
-        As each hyperedge needs to be compared to the n-i next ones, this part is at
-        least of complexity O(nlogn).
-        '''
-        logger.info("We begin with %s hyperedges.", str(len(self.hyperedges)))
-        i = 0
-        duplicateCount = 0
-        errorCount = 0
-        dumpDuplicates = ""
-        dumpUniques = ""
-        while i < len(self.hyperedges):
-            hyperedgeA = self.hyperedges[i]
-            duplicate = False
-            # TODO delete clusterAMerged. This is useless. Since we already compare A to _all_ subsequent hyperedges, there is no need to mark it as merged.
-            clusterAMerged = False  # Flag set in case an hyperedgeA is merged
-                                    # into an hyperedgeB.
-            j = i + 1
-            while j < len(self.hyperedges) and not clusterAMerged:
-                hyperedgeB = self.hyperedges[j]
-                if len(hyperedgeA.clusters) == len(hyperedgeB.clusters):
+            logger.info("Merging hyperedges")
+            '''
+            Merging hyperedges is looking for hyperedges with the same amount of vertices,
+            check if those are the same and if so, add the nets from the second hyperedge
+            to the first.
+            As each hyperedge needs to be compared to the n-i next ones, this part is at
+            least of complexity O(nlogn).
+            '''
+            logger.info("We begin with %s hyperedges.", str(len(self.hyperedges)))
+            i = 0
+            duplicateCount = 0
+            errorCount = 0
+            dumpDuplicates = ""
+            dumpUniques = ""
+            while i < len(self.hyperedges):
+                hyperedgeA = self.hyperedges[i]
+                duplicate = False
+                # TODO delete clusterAMerged. This is useless. Since we already compare A to _all_ subsequent hyperedges, there is no need to mark it as merged.
+                clusterAMerged = False  # Flag set in case an hyperedgeA is merged
+                                        # into an hyperedgeB.
+                j = i + 1
+                while j < len(self.hyperedges) and not clusterAMerged:
+                    hyperedgeB = self.hyperedges[j]
+                    if len(hyperedgeA.clusters) == len(hyperedgeB.clusters):
 
-                    # Find duplicates
-                    duplicate = True
-                    for clusterA in hyperedgeA.clusters:
-                        nameFound = False
-                        for clusterB in hyperedgeB.clusters:
-                            if clusterA.name == clusterB.name:
-                                nameFound = True
+                        # Find duplicates
+                        duplicate = True
+                        for clusterA in hyperedgeA.clusters:
+                            nameFound = False
+                            for clusterB in hyperedgeB.clusters:
+                                if clusterA.name == clusterB.name:
+                                    nameFound = True
+                                    break
+                            if not nameFound:
+                                duplicate = False
                                 break
-                        if not nameFound:
-                            duplicate = False
-                            break
 
 
-                    # Check if the found duplicates are correct.
-                    # This can be used as debug.
-                    # if duplicate:
-                    #     # Check if the duplicate is correct
-                    #     if len(hyperedgeA.clusters) != len(hyperedgeB.clusters):
-                    #         print "False duplicate: different length."
-                    #     else:
-                    #         error = False
-                    #         for clusterA in hyperedgeA.clusters:
-                    #             nameFound = False
-                    #             for clusterB in hyperedgeB.clusters:
-                    #                 if clusterA.name == clusterB.name:
-                    #                     nameFound = True
-                    #             if not nameFound:
-                    #                 error = True
-                    #         if error:
-                    #             errorCount += 1
-                    #             print "False duplicate: different cluster name."
-                    #             print "Cluster A: "
-                    #             for cluster in hyperedgeA.clusters:
-                    #                 print cluster.name
-                    #             if clustersA != None:
-                    #                 print "Set: " + str(clustersA)
-                    #             print "Cluster B: "
-                    #             for cluster in hyperedgeB.clusters:
-                    #                 print cluster.name
-                    #             if clustersB != None:
-                    #                 print "Set: " + str(clustersB)
-                    #             print "Python thought the difference was " + str(setsDifference) + " which it considered empty = " + str(bool(not setsDifference))
+                        # Check if the found duplicates are correct.
+                        # This can be used as debug.
+                        # if duplicate:
+                        #     # Check if the duplicate is correct
+                        #     if len(hyperedgeA.clusters) != len(hyperedgeB.clusters):
+                        #         print "False duplicate: different length."
+                        #     else:
+                        #         error = False
+                        #         for clusterA in hyperedgeA.clusters:
+                        #             nameFound = False
+                        #             for clusterB in hyperedgeB.clusters:
+                        #                 if clusterA.name == clusterB.name:
+                        #                     nameFound = True
+                        #             if not nameFound:
+                        #                 error = True
+                        #         if error:
+                        #             errorCount += 1
+                        #             print "False duplicate: different cluster name."
+                        #             print "Cluster A: "
+                        #             for cluster in hyperedgeA.clusters:
+                        #                 print cluster.name
+                        #             if clustersA != None:
+                        #                 print "Set: " + str(clustersA)
+                        #             print "Cluster B: "
+                        #             for cluster in hyperedgeB.clusters:
+                        #                 print cluster.name
+                        #             if clustersB != None:
+                        #                 print "Set: " + str(clustersB)
+                        #             print "Python thought the difference was " + str(setsDifference) + " which it considered empty = " + str(bool(not setsDifference))
 
-                    #     # Dump the duplicates
-                    #     for cluster in hyperedgeA.clusters:
-                    #         dumpDuplicates += str(cluster.name) + " "
-                    #     dumpDuplicates += "\n"
-                    #     for cluster in hyperedgeB.clusters:
-                    #         dumpDuplicates += str(cluster.name) + " "
-                    #     dumpDuplicates += "\n"
+                        #     # Dump the duplicates
+                        #     for cluster in hyperedgeA.clusters:
+                        #         dumpDuplicates += str(cluster.name) + " "
+                        #     dumpDuplicates += "\n"
+                        #     for cluster in hyperedgeB.clusters:
+                        #         dumpDuplicates += str(cluster.name) + " "
+                        #     dumpDuplicates += "\n"
 
 
-                    if duplicate:
-                        # Append the net from hyperedgeB to hyperedgeA.
-                        # At this point, hyperedgeB only has one edge,
-                        # because it has not been merged with anything
-                        # and only merged hyperedges can have more than
-                        # one edge.
-                        duplicateCount += 1
-                        hyperedgeA.addNet(hyperedgeB.nets[0])
-                        hyperedgeA.connectivity += 1
-                        del self.hyperedges[j]
-                        # clusterAMerged = True
+                        if duplicate:
+                            # Append the net from hyperedgeB to hyperedgeA.
+                            # At this point, hyperedgeB only has one edge,
+                            # because it has not been merged with anything
+                            # and only merged hyperedges can have more than
+                            # one edge.
+                            duplicateCount += 1
+                            hyperedgeA.addNet(hyperedgeB.nets[0])
+                            hyperedgeA.connectivity += 1
+                            del self.hyperedges[j]
+                            # clusterAMerged = True
+                        else:
+                            j += 1
+
+
                     else:
                         j += 1
 
+                # If hyperedgeA has not been merged, inspect the next one.
+                # Otherwise, hyperedgeB has been deleted and all the following
+                # elements have been shifted, thus no need to increment the index.
+                if not clusterAMerged:
+                    i += 1
 
-                else:
-                    j += 1
+                progression = printProgression(i, len(self.hyperedges))
+                if progression != "":
+                    logger.info(progression)
 
-            # If hyperedgeA has not been merged, inspect the next one.
-            # Otherwise, hyperedgeB has been deleted and all the following
-            # elements have been shifted, thus no need to increment the index.
-            if not clusterAMerged:
-                i += 1
+            logger.info("Duplicates: %s", str(duplicateCount))
+            logger.info("Errors: %s", str(errorCount))
 
-            progression = printProgression(i, len(self.hyperedges))
-            if progression != "":
-                logger.info(progression)
-
-        logger.info("Duplicates: %s", str(duplicateCount))
-        logger.info("Errors: %s", str(errorCount))
         logger.info("We end up with %s hyperedges.", str(len(self.hyperedges)))
 
         # for hyperedge in self.hyperedges:
@@ -561,15 +557,15 @@ class Graph():
             logger.info("Prepare simple graph")
             # print self.clusters
             for i, hyperedge in enumerate(self.hyperedges):
-                for k, clusterA in enumerate(hyperedge.clusters):
+                for k, clusterAKey in enumerate(hyperedge.clusters):
                     # Due to the fact that the hyperedges come from another process,
                     # the objects in hyperedge.clusters and self.clusters do not point
                     # to the same element anymore.
-                    clusterA = self.clusters[clusterA.ID]
-                    for l, clusterB in enumerate(hyperedge.clusters):
-                        clusterB = self.clusters[clusterB.ID]
+                    clusterA = self.clusters[clusterAKey]
+                    for l, clusterBKey in enumerate(hyperedge.clusters):
+                        clusterB = self.clusters[clusterBKey]
                         if l != k:
-                            clusterA.connectedClusters.append(clusterB.ID)
+                            clusterA.connectedClusters.append(clusterB.name)
                             clusterA.connectedEdges.append(hyperedge)
                     # print len(clusterA.connectedClusters)
 
@@ -585,13 +581,15 @@ class Graph():
             if VERTEX_WEIGHTS_TYPES > 1:
                 s += " " + str(VERTEX_WEIGHTS_TYPES)
 
-            for i, cluster in enumerate(self.clusters):
+            for key in self.clusters:
                 # print cluster
+                cluster = self.clusters[key]
                 s += "\n"
                 for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
                     s += str(cluster.weightsNormalized[weightType]) + " "
-                for j in xrange(0, len(cluster.connectedClusters)):
-                    s += " " + str(cluster.connectedClusters[j] + 1) + \
+                # for j in xrange(0, len(cluster.connectedClusters)):
+                for j, clusterName in enumerate(cluster.connectedClusters):
+                    s += " " + str(self.clusters[clusterName].ID + 1) + \
                         " " + str(cluster.connectedEdges[j].weightsNormalized[edgeWeightType])
 
 
@@ -602,7 +600,8 @@ class Graph():
                 for cluster in hyperedge.clusters:
                     s += str(cluster.ID + 1) + " "  # hmetis does not like to have hyperedges
                                                     # beginning with a cluster of ID '0'.
-            for cluster in self.clusters:
+            for key in self.clusters:
+                cluster = self.clusters[key]
                 s += "\n" + str(cluster.weightsNormalized[vertexWeightType])
         with open(filename, 'w') as file:
             file.write(s)
@@ -629,8 +628,8 @@ class Graph():
 
         s += "\n"
 
-        for cluster in self.clusters:
-            s += str(cluster.weightsNormalized[vertexWeightType]) + " "
+        for key in self.clusters:
+            s += str(self.clusters[key].weightsNormalized[vertexWeightType]) + " "
 
         s += "\n" # Requires a new line at the end of the file.
 
@@ -710,7 +709,8 @@ class Graph():
         For each cluster, set a random power density.
         The power of the cluster is thus its density * its area.
         '''
-        for cluster in self.clusters:
+        for key in self.clusters:
+            cluster = self.clusters[key]
             powerDensity = random.uniform(1, HETEROGENEOUS_FACTOR)
             power = cluster.area * powerDensity
             cluster.setPowerDensity(powerDensity)
@@ -731,7 +731,8 @@ class Graph():
         for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
             # Weight = cluster area
             if weightType == 0:
-                for cluster in self.clusters:
+                for key in self.clusters:
+                    cluster = self.clusters[key]
                     weight = cluster.area
 
                     if weight > self.clusterWeightsMax[weightType]:
@@ -743,7 +744,8 @@ class Graph():
             # Weight = cluster power
             elif weightType == 1:
 
-                for cluster in self.clusters:
+                for key in self.clusters:
+                    cluster = self.clusters[key]
                     weight = cluster.power
                     totalPower += weight
                     cluster.setWeight(weightType, weight)
@@ -752,7 +754,8 @@ class Graph():
                         self.clusterWeightsMax[weightType] = weight
 
         # Normalization
-        for cluster in self.clusters:
+        for key in self.clusters:
+            cluster = self.clusters[key]
             for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
                 weight = ((cluster.weights[weightType] * MAX_WEIGHT) / self.clusterWeightsMax[weightType]) + 1
                 cluster.setWeightNormalized(weightType, int(weight))
@@ -776,7 +779,7 @@ class Graph():
             dummy.setWeightNormalized(0, 1)
             dummy.setWeightNormalized(1, dummy.power)
             dummy.setDummy(True)
-            self.clusters.append(dummy)
+            self.clusters[dummy.name] = dummy
 
 
 
@@ -838,7 +841,8 @@ class Graph():
         # of the .tcl directives, allowing to apply easy column
         # edits later on.
         maxLength = 0
-        for cluster in self.clusters:
+        for key in self.clusters:
+            cluster = self.clusters[key]
             if len(cluster.name) > maxLength:
                 maxLength = len(cluster.name)
 
@@ -847,7 +851,18 @@ class Graph():
         if ALGO==1: # In PaToH, everything is on one single line.
             data = data[0].split()
 
-        for i, cluster in enumerate(self.clusters):
+        # This enumeration assumes that the self.clusters dictionary
+        # is sorted based on the cluster ID. However, as we use the
+        # cluster name as a key, it is not the case.
+        # Hence, we need a clone dictionary with the ID as key.
+        # I think this the most efficient way to proceed time-wise.
+        clusterDictID = dict()
+        for key in self.clusters:
+            clusterDictID[self.clusters[key].ID] = self.clusters[key]
+
+        for i, key in enumerate(clusterDictID):
+            # cluster = self.clusters[key]
+            cluster = clusterDictID[key]
             s = ""
             sInst = ""
             # Comment the dummy cluster out.
@@ -957,7 +972,8 @@ class Graph():
     def dumpClusters(self):
         s = "ID -- Cluster -- Area -- Power density -- Power"
         # print "len(self.clusters) = " + str(len(self.clusters))
-        for cluster in self.clusters:
+        for key in self.clusters:
+            cluster = self.clusters[key]
             s += str(cluster.ID) + "\t" + cluster.name + "\t" + str(cluster.area) + "\t" + \
                 str(cluster.powerDensity) + "\t" + str(cluster.power) + "\n"
         with open("clusters", 'w') as f:
@@ -1068,6 +1084,7 @@ class Graph():
 
 
     def extractPartitions(self, partitionFile):
+        logger.info("Extracting partitions directives.")
         with open(partitionFile, 'r') as f:
             lines = f.read().splitlines()
 
@@ -1077,9 +1094,14 @@ class Graph():
         for line in lines:
             lineData = line.split()
             if lineData[2] != DUMMY_NAME:
-                found, index = self.findClusterByName(lineData[2])
-                partitionIndex = int(lineData[4][3]) # Fourth character of 'DieX'
-                self.partitions[partitionIndex].append(self.clusters[index])
+                try:
+                    cluster = self.clusters[lineData[2]]
+                except KeyError:
+                    pass
+                else:
+                    partitionIndex = int(lineData[4][3]) # Fourth character of 'DieX'
+                    self.partitions[partitionIndex].append(cluster)
+
 
 
     def printPartitions(self):
@@ -1269,7 +1291,7 @@ class Cluster:
                             # [1] = power
                             # [2] = area & power
         self.weightsNormalized = []
-        self.connectedClusters = [] # List of Cluster IDs connected to this cluster.
+        self.connectedClusters = [] # List of Cluster names connected to this cluster.
         self.connectedEdges = []    # List of Hyperedge objects.
                                     # They are the edges connecting this cluster to others.
                                     # Those hyperedges are needed to establish weights.
@@ -1325,17 +1347,6 @@ class Cluster:
 
     def setWeightNormalized(self, index, weight):
         self.weightsNormalized[index] = weight
-
-    def searchConnectedCluster(self, cluster):
-        found = False
-        index = -1
-        try:
-            index = self.connectedClusters.index(cluster)
-        except:
-            pass
-        else:
-            found = True
-        return index, found
 
     def setPower(self, power):
         self.power = power
