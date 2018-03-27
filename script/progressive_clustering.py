@@ -1,6 +1,14 @@
 import os
 from natsort import natsorted
 from sets import Set
+import shutil
+import sys, getopt
+import errno
+
+def timeSorted(path):
+	# https://stackoverflow.com/a/4500607/3973030
+	mtime = lambda f: os.stat(os.path.join(path, f)).st_mtime
+	return list(sorted(os.listdir(path), key=mtime))
 
 def splitFile(rootDir, depth, ps):
 	'''
@@ -19,12 +27,11 @@ def splitFile(rootDir, depth, ps):
 		os.system("python " + phoneyScript + " -d " + rootDir + " -w 1")
 
 		# Partition directory created by PHONEY.
-		partDir = os.path.join(rootDir, natsorted(os.listdir(rootDir))[-1])
+		partDir = os.path.join(rootDir, timeSorted(rootDir)[-1])
 		# Need to create those for the progressive clustering.
 		subPartDir0 = os.path.join(partDir, "progressive_cluster_" + str(depth) + "_0")
 		subPartDir1 = os.path.join(partDir, "progressive_cluster_" + str(depth) + "_1")
 
-		print("try to create new clustering dirs.")
 		try:
 			os.makedirs(subPartDir0)
 			os.makedirs(subPartDir1)
@@ -32,7 +39,6 @@ def splitFile(rootDir, depth, ps):
 			if e.errno != errno.EEXIST:
 				raise
 
-		print("New clustering dir created.")
 		part0Clusters = Set()
 		part1Clusters = Set()
 
@@ -223,13 +229,101 @@ def splitFile(rootDir, depth, ps):
 	else:
 		return None
 
+
+
+
+def mergeClusters(dirs, rootDir):
+	'''
+	This function should first create a new directory for the new clusters.
+	It should be placed one level above the root directory, so that it lies next to
+	the original clustering directory.
+
+	@rootDir: os path
+	Its last directory should be structured as <design>_<clustering method>_<clustering size>.
+	'''
+
+	progClustDir = os.path.join((os.sep).join(rootDir.split(os.sep)[:-1]),(rootDir.split(os.sep)[-1]).split('_')[0] + "_progressive_" + str(len(dirs)))
+	# print progClustDir
+
+	try:
+		os.makedirs(progClustDir)
+	except OSError as e:
+		if e.errno != errno.EEXIST:
+			raise
+
+	# First copy the unchanged files.
+	shutil.copy(os.path.join(rootDir, "CellCoord.out"), progClustDir)
+	shutil.copy(os.path.join(rootDir, "InstancesPerNet.out"), progClustDir)
+	shutil.copy(os.path.join(rootDir, "Nets.out"), progClustDir)
+	shutil.copy(os.path.join(rootDir, "WLnets.out"), progClustDir)
+
+	clustersInstances = ""
+	clustersArea = [0] * len(dirs)
+	clustersInstancesCount = [0] * len(dirs)
+	clustersAreaStr = "Name Type InstCount Boundary Area\n"
+	clustersStr = ""
+	for i in range(0, len(dirs)):
+		d = dirs[i]
+		with open(os.path.join(d, "ClustersArea.out"), 'r') as f:
+
+			line = f.readline().strip()
+			# Skip header line
+			line = f.readline().strip()
+			while line:
+				clustersArea[i] += float(line.split(' ')[-1])
+				clustersInstancesCount[i] += int(line.split(' ')[2])
+
+
+				line = f.readline().strip()
+			clustersAreaStr += str(i) + " exclusive " + str(clustersInstancesCount[i]) + " (0,0) (0,0) " + str(clustersArea[i]) + "\n"
+
+		with open(os.path.join(d, "ClustersInstances.out"), 'r') as f:
+			clustersInstances += str(i)
+			line = f.readline().strip()
+			while line:
+				clustersInstances += " " + line.split(' ')[-1]
+				line = f.readline().strip()
+			clustersInstances += "\n"
+		clustersStr += str(i) + "\n"
+
+
+	with open(os.path.join(progClustDir, "ClustersArea.out"), 'w') as f:
+		f.write(clustersAreaStr)
+	with open(os.path.join(progClustDir, "ClustersInstances.out"), 'w') as f:
+		f.write(clustersInstances)
+	with open(os.path.join(progClustDir, "Clusters.out"), 'w') as f:
+		f.write(clustersStr)
+
+
+
+
+
+
 if __name__ == "__main__":
 
-	phoneyScript = "/home/para/dev/metis_unicorn/script/phoney.py"
+	phoneyScript = ""
+	rootDir = ""
+	depth = None
 
-	depth = 3
-	rootDir = "/home/para/dev/metis_unicorn/temp_design/ldpc_random_0"
+	try:
+		opts, args = getopt.getopt(sys.argv[1:],"d:s:n:")
+	except getopt.GetoptError:
+		print "YO FAIL"
+	else:
+		for opt, arg in opts:
+			if opt == "-d":
+				rootDir = arg
+			if opt == "-s":
+				phoneyScript = arg
+			if opt == "-n":
+				depth = int(arg)
+		if rootDir == "":
+			rootDir = "/home/para/dev/def_parser/2018-03-14_17-00-18/ldpc-4x4-serial_random_0"
+		if phoneyScript == "":
+			phoneyScript = "/home/para/dev/metis_unicorn/script/phoney.py"
+		if depth is None:
+			depth = 3
 
 	leafDirs = splitFile(rootDir, depth, phoneyScript)
-	print leafDirs
 	print("Total nodes: ", len(leafDirs))
+	mergeClusters(leafDirs, rootDir)
