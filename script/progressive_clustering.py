@@ -3,6 +3,16 @@ from natsort import natsorted
 from sets import Set
 
 def splitFile(rootDir, depth, ps):
+	'''
+	@return: None or list of dirs.
+	The aim is to fetch the leaf directories of the recursivity tree.
+	To do that, we return None when we reached the end of the tree (depth == 0).
+	In the tree, we check is the returned value of the next branch is None.
+	If it is, it means we are currently at the leaf and need to return the two
+	sub-directories we created.
+	If it's not, we are in the middle of the tree and we simply propagate the
+	directories coming from the leaves.
+	'''
 	if depth > 0:
 
 		os.chdir("/".join(ps.split('/')[:-1]))
@@ -201,8 +211,17 @@ def splitFile(rootDir, depth, ps):
 
 
 		# Recursivity \o/
-		splitFile(subPartDir0, depth-1, ps)
-	return 0
+		leafDirs0 = splitFile(subPartDir0, depth-1, ps)
+		leafDirs1 = splitFile(subPartDir1, depth-1, ps)
+
+		if leafDirs0 is None and leafDirs1 is None:
+			return [subPartDir0, subPartDir1]
+		else:
+			for leaf in leafDirs1:
+				leafDirs0.append(leaf)
+			return leafDirs0
+	else:
+		return None
 
 if __name__ == "__main__":
 
@@ -211,4 +230,6 @@ if __name__ == "__main__":
 	depth = 3
 	rootDir = "/home/para/dev/metis_unicorn/temp_design/ldpc_random_0"
 
-	splitFile(rootDir, depth, phoneyScript)
+	leafDirs = splitFile(rootDir, depth, phoneyScript)
+	print leafDirs
+	print("Total nodes: ", len(leafDirs))
