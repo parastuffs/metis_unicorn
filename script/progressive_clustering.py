@@ -231,6 +231,42 @@ def splitFile(rootDir, depth, ps):
 
 
 
+def recycleTree(rootDir, depth):
+	'''
+	@rootDir: full os path
+	@return: None or rootDir in an array
+	'''
+
+	if depth > 0:
+		finalDirs = []
+		isPartDir = False
+		isClustDir = False
+		if "partitions" in rootDir.split(os.sep)[-1]:
+			isPartDir = True
+		elif "progressive_cluster" in rootDir.split(os.sep)[-1]:
+			isClustDir = True
+		else:
+			return None
+
+		if isPartDir:
+			depth -= 1
+
+		for d in os.listdir(rootDir):
+			subdir = os.path.join(rootDir, d)
+			if os.path.isdir(subdir):
+				returnDirs = recycleTree(subdir, depth)
+				for sub in returnDirs:
+					if sub is not None:
+						finalDirs.append(sub)
+
+		return finalDirs
+	else:
+		return [rootDir]
+
+
+
+
+
 
 def mergeClusters(dirs, rootDir):
 	'''
@@ -304,9 +340,12 @@ if __name__ == "__main__":
 	phoneyScript = ""
 	rootDir = ""
 	depth = None
+	# Reuse the existing folders.
+	# Warning: the input directory needs to be a 'partitions_...' folder.
+	reuse = False
 
 	try:
-		opts, args = getopt.getopt(sys.argv[1:],"d:s:n:")
+		opts, args = getopt.getopt(sys.argv[1:],"d:s:n:r")
 	except getopt.GetoptError:
 		print "YO FAIL"
 	else:
@@ -317,6 +356,8 @@ if __name__ == "__main__":
 				phoneyScript = arg
 			if opt == "-n":
 				depth = int(arg)
+			if opt == "-r":
+				reuse = True
 		if rootDir == "":
 			rootDir = "/home/para/dev/def_parser/2018-03-14_17-00-18/ldpc-4x4-serial_random_0"
 		if phoneyScript == "":
@@ -324,6 +365,12 @@ if __name__ == "__main__":
 		if depth is None:
 			depth = 3
 
-	leafDirs = splitFile(rootDir, depth, phoneyScript)
+	if not reuse:
+		leafDirs = splitFile(rootDir, depth, phoneyScript)
+	else:
+		leafDirs = recycleTree(rootDir, depth)
+		# In case of recycling, we get an extra folder as input.
+		rootDir = os.sep.join(rootDir.split(os.sep)[:-1])
+	# print leafDirs
 	print("Total nodes: ", len(leafDirs))
 	mergeClusters(leafDirs, rootDir)
