@@ -861,7 +861,6 @@ class Graph():
             clusterDictID[self.clusters[key].ID] = self.clusters[key]
 
         for i, key in enumerate(clusterDictID):
-            # cluster = self.clusters[key]
             cluster = clusterDictID[key]
             s = ""
             sInst = ""
@@ -1465,14 +1464,17 @@ if __name__ == "__main__":
 
 
     dirs = []
+    EDGE_WEIGHTS_TYPES = 0
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"d:")
+        opts, args = getopt.getopt(sys.argv[1:],"d:w:")
     except getopt.GetoptError:
         print "YO FAIL"
     else:
         for opt, arg in opts:
             if opt == "-d":
                 dirs = [arg]
+            if opt == "-w":
+                EDGE_WEIGHTS_TYPES = int(arg)
 
         if dirs == []:
             # logger.warning("No suitable directory given. Using hardcoded instead.")
@@ -1498,6 +1500,8 @@ if __name__ == "__main__":
             # dirs = ["../LDPC_1000/"]
             # dirs = ["../temp_design/"]
             dirs = ["/home/para/dev/def_parser/2018-01-25_16-16-50/ccx_Naive_Geometric_25"]
+        if EDGE_WEIGHTS_TYPES == 0:
+            EDGE_WEIGHTS_TYPES = 10
 
 
 
