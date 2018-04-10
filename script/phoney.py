@@ -43,7 +43,7 @@ THREADS = 1     # Amount of parallel process to use when building the hypergraph
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
                         # 2: Custom clustering, no boundaries
-SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
+SIMPLE_GRAPH = True    # False: hypergraph, using hmetis
                         # True: standard graph, using gpmetis
 MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
 IMPORT_HYPERGRAPH = False    # True: import the hypergraph from a previous dump,
@@ -98,7 +98,7 @@ def printProgression(current, max):
 def buildHyperedges(startIndex, endIndex, nets, clusters):
 
     hyperedges = []
-    logger.debug("in process")
+    logger.debug("We have %i nets and %i clusters that need to be converted into a graph.", len(nets), len(clusters))
     # print clusters
     i = startIndex
     while i < endIndex:
@@ -106,8 +106,16 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
 
         if len(net.clusters) > 1:
             if SIMPLE_GRAPH:
-                # Do smth
-                logger.error("Simple graph NOT IMPLEMENTED!")
+                # logger.warning("Simple graph EXPERIMENTAL")
+                # logger.debug(i)
+                clusters = list(net.clusters)
+                for k in range(len(clusters)):
+                    for j in range(k+1,len(clusters)):
+                        hyperedge = Hyperedge()
+                        hyperedge.addCluster(clusters[k])
+                        hyperedge.addCluster(clusters[j])
+                        hyperedge.addNet(net)
+                        hyperedges.append(hyperedge)
             else:
                 hyperedge = Hyperedge()
                 for cluster in net.clusters:
@@ -555,19 +563,12 @@ class Graph():
 
         if SIMPLE_GRAPH:
             logger.info("Prepare simple graph")
-            # print self.clusters
             for i, hyperedge in enumerate(self.hyperedges):
-                for k, clusterAKey in enumerate(hyperedge.clusters):
-                    # Due to the fact that the hyperedges come from another process,
-                    # the objects in hyperedge.clusters and self.clusters do not point
-                    # to the same element anymore.
-                    clusterA = self.clusters[clusterAKey]
-                    for l, clusterBKey in enumerate(hyperedge.clusters):
-                        clusterB = self.clusters[clusterBKey]
+                for k, clusterA in enumerate(hyperedge.clusters):
+                    for l, clusterB in enumerate(hyperedge.clusters):
                         if l != k:
                             clusterA.connectedClusters.append(clusterB.name)
                             clusterA.connectedEdges.append(hyperedge)
-                    # print len(clusterA.connectedClusters)
 
 
 
