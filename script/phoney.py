@@ -15,6 +15,7 @@ TODO
 
 import math
 from subprocess import call
+import subprocess
 import copy
 import matplotlib.pyplot as plt
 import threading
@@ -26,14 +27,17 @@ from sets import Set
 import os
 import datetime
 import sys, getopt
-import logging, logging.config 
+import logging, logging.config
+import shutil
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
 PATOH_PATH = "/home/para/Downloads/patoh/build/Linux-x86_64/"
-ALGO = 0 # 0: METIS
+CIRCUT_PATH = "/home/para/dev/circut10612/circut_v1.0612/tests/"
+ALGO = 2 # 0: METIS
          # 1: PaToH
+         # 2: Circut
 EDGE_WEIGHTS_TYPES = 10
 # EDGE_WEIGHTS_TYPES = 1
 VERTEX_WEIGHTS_TYPES = 1
@@ -638,6 +642,23 @@ class Graph():
             file.write(s)
 
 
+    def generateCircutInput(self, filename, edgeWeightType, vertexWeightType):
+        logger.info("Generating Circut input file...")
+        s = str(len(self.clusters)) + " " + str(len(self.hyperedges)) + "\n"
+
+
+        for h in self.hyperedges:
+            for c in h.clusters:
+                s += " " + str(c.ID + 1)
+            s += " " + str(h.weightsNormalized[edgeWeightType])
+            s += "\n"
+
+        with open(filename, 'w') as file:
+            file.write(s)
+
+
+
+
     def computeHyperedgeWeights(self, normalized):
         logger.info("Generating weights of hyperedges.")
 
@@ -822,6 +843,32 @@ class Graph():
         call(command.split())
 
 
+    def GraphPartitionCircut(self, filename, outFilename):
+        logger.info("--------------------------------------------------->")
+        logger.info("Running Circut with %s", filename)
+        workingDir = os.getcwd()
+        tempWorkingDir = CIRCUT_PATH
+        tempFile = os.path.join(CIRCUT_PATH, "tmp.gset")
+        distantFilename = os.path.join(CIRCUT_PATH, filename.split(os.sep)[-1])
+        distantOutFilename = os.path.join(CIRCUT_PATH, outFilename)
+        shutil.copyfile(filename, distantFilename)
+        with open(tempFile, 'w') as f:
+            f.write(filename.split(os.sep)[-1] + "\n")
+        command = "./circut < tmp.gset"
+        print command
+        os.chdir(tempWorkingDir)
+        child = subprocess.Popen(command, shell=True, stdout=None)
+        child.wait()
+        os.chdir(workingDir)
+        # Copy back the partition file
+        shutil.copyfile(distantOutFilename, os.path.join(os.sep.join(filename.split(os.sep)[:-1]), outFilename))
+        os.remove(tempFile)
+        os.remove(distantFilename)
+        os.remove(distantOutFilename)
+
+
+
+
     def WritePartitionDirectives(self, metisFileIn, metisFileOut, gatePerDieFile):
         '''
         Create the partition directives in .tcl files.
@@ -851,6 +898,14 @@ class Graph():
         data = fIn.readlines()
         if ALGO==1: # In PaToH, everything is on one single line.
             data = data[0].split()
+
+        if ALGO==2: # Circut, die is -1 or 1. Change all -1 to 0.
+            del data[0] # Remove the first header line
+            for i in range(len(data)):
+                data[i] = data[i].replace("-1", "0")
+                data[i] = data[i].replace(" 1", "1") # remove the space so that we get 'Die1' and not 'Die 1'
+
+        # print data
 
         # This enumeration assumes that the self.clusters dictionary
         # is sorted based on the cluster ID. However, as we use the
@@ -1651,6 +1706,25 @@ if __name__ == "__main__":
                     graph.generatePaToHInput(patohInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartitionPaToH(patohInput)
                     graph.WritePartitionDirectives(patohPartitionFile, partitionDirectivesFile)
+                    graph.extractPartitions(partitionDirectivesFile)
+                    graph.computePartitionArea()
+                    graph.computePartitionPower()
+
+                elif ALGO == 2: # Circut
+                    circutInput = os.path.join(output_dir, "circut_" + edgeWeightTypesStr[edgeWeightType] + \
+                        "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr")
+                    circutPartitionFile = circutInput + "_maxcut.cut"
+                    partitionDirectivesFile = circutInput + ".tcl"
+                    gatePerDieFile = circutInput + ".part"
+
+                    logger.info("=======================Circut=================================")
+                    logger.info("> Edge weight: " + edgeWeightTypesStr[edgeWeightType])
+                    logger.info("> Vertex weight: " + vertexWeightTypesStr[vertexWeightType])
+                    logger.info("==============================================================")
+
+                    graph.generateCircutInput(circutInput, edgeWeightType, vertexWeightType)
+                    graph.GraphPartitionCircut(circutInput, circutPartitionFile.split(os.sep)[-1])
+                    graph.WritePartitionDirectives(circutPartitionFile, partitionDirectivesFile, gatePerDieFile)
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
