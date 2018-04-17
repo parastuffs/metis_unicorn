@@ -1,16 +1,24 @@
 """
 PHONEY [Pronounce 'poney'], Partitioning of Hypergraph Obviously Not EasY
 
-Want to use it? Then check the 'HMETIS_PATH' and 'dirs' variables.
-
 Note: It is very important at the moment that the clusters have the same ID as their
 position in the Graph.clusters list.
-"""
 
-"""
-TODO
-> Doc
-> Change the ID of the clusters so that it begins at 1 instead of 0.
+Usage:
+    phoney.py   [-d <dir>] [-w <weight>] [--seed=seed] [--algo=algo] [--path=path]
+                [--simple-graph]
+    phoney.py --help
+
+Options:
+    -d <dir>        Design directory containing the cluster information (.out files and such)
+    -w <weight>     Amount of edge weights to consider, [1, 10]
+    --seed=seed     RNG seed
+    --algo=algo     0: hMETIS [default: 0]
+                    1: PaToH
+                    2: Circut
+    --path=path     Full path to the partitioning tool
+    --simple-graph  If set, translate the hypergraph into a simple graph
+    -h --help       Print this help
 """
 
 import math
@@ -26,16 +34,17 @@ import random
 from sets import Set
 import os
 import datetime
-import sys, getopt
+import sys
 import logging, logging.config
 import shutil
+from docopt import docopt
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
 PATOH_PATH = "/home/para/Downloads/patoh/build/Linux-x86_64/"
 CIRCUT_PATH = "/home/para/dev/circut10612/circut_v1.0612/tests/"
-ALGO = 2 # 0: METIS
+ALGO = 0 # 0: METIS
          # 1: PaToH
          # 2: Circut
 EDGE_WEIGHTS_TYPES = 10
@@ -47,7 +56,7 @@ THREADS = 1     # Amount of parallel process to use when building the hypergraph
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
                         # 2: Custom clustering, no boundaries
-SIMPLE_GRAPH = True    # False: hypergraph, using hmetis
+SIMPLE_GRAPH = False    # False: hypergraph, using hmetis
                         # True: standard graph, using gpmetis
 MEMORY_BLOCKS = False   # True if there are memory blocks (bb.out)
 IMPORT_HYPERGRAPH = False    # True: import the hypergraph from a previous dump,
@@ -857,6 +866,7 @@ class Graph():
         command = "./circut < tmp.gset"
         print command
         os.chdir(tempWorkingDir)
+        # TODO find a fracking way to get the output of the called command in the calling script. I want it in the log.
         child = subprocess.Popen(command, shell=True, stdout=None)
         child.wait()
         os.chdir(workingDir)
@@ -1512,55 +1522,34 @@ def initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr):
 
 
 if __name__ == "__main__":
-    """
-    Usage: phoney -d <input directory>
-
-    Is no argument is given, a hardcoded default dir is used."
-    """
-
-
     dirs = []
     EDGE_WEIGHTS_TYPES = 0
-    try:
-        opts, args = getopt.getopt(sys.argv[1:],"d:w:")
-    except getopt.GetoptError:
-        print "YO FAIL"
+    args = docopt(__doc__)
+    print args
+    if args["-d"]:
+        dirs.append(args["-d"])
     else:
-        for opt, arg in opts:
-            if opt == "-d":
-                dirs = [arg]
-            if opt == "-w":
-                EDGE_WEIGHTS_TYPES = int(arg)
-
-        if dirs == []:
-            # logger.warning("No suitable directory given. Using hardcoded instead.")
-            # dirs=["../input_files/"]
-            # dirs=["../ccx/"]
-            # dirs=["../CCX_HL1/"]
-            # dirs=["../CCX_HL2/"]
-            # dirs=["../CCX_HL3/"]
-            # dirs=["../CCX_HL4/"]
-            # dirs = ["../MPSoC/"]
-            # dirs = ["../spc_L3/"]
-            # dirs = ["../spc_HL1/"]
-            # dirs = ["../spc_HL2/"]
-            # dirs = ["../SPC/spc_HL3/"]
-            # dirs = ["../SPC/spc_HL2/"]
-            # dirs = ["../CCX_Auto0500/"]
-            # dirs = ["../CCX_Auto1000/"]
-            # dirs = ["../RTX/RTX_HL3/"]
-            # dirs = ["../RTX/RTX_HL2/"]
-            # dirs = ["../RTX/RTX_A0500/"]
-            # dirs = ["../RTX/RTX_A1000/"]
-            # dirs = ["../LDPC_100/"]
-            # dirs = ["../LDPC_1000/"]
-            # dirs = ["../temp_design/"]
-            dirs = ["/home/para/dev/def_parser/2018-01-25_16-16-50/ccx_Naive_Geometric_25"]
-        if EDGE_WEIGHTS_TYPES == 0:
-            EDGE_WEIGHTS_TYPES = 10
-
-
-
+        # dirs = ["../temp_design/"]
+        dirs = ["/home/para/dev/def_parser/2018-01-25_16-16-50/ccx_Naive_Geometric_25"]
+    if args["-w"]:
+        EDGE_WEIGHTS_TYPES = int(args["-w"])
+    else:
+       EDGE_WEIGHTS_TYPES = 10
+    if args["--seed"]:
+        RANDOM_SEED = int(args["--seed"])
+    if args["--algo"]:
+        ALGO = int(args["--algo"])
+    else:
+        ALGO = 0
+    if args["--path"]:
+        if ALGO == 0:
+            METIS_PATH = args["--path"]
+        elif ALGO == 1:
+            PATOH_PATH = args["--path"]
+        elif ALGO == 2:
+            CIRCUT_PATH = args["--path"]
+    if args["--simple-graph"]:
+        SIMPLE_GRAPH = True
 
 
     # Random seed is preset or random, depends on weither you want the same results or not.
