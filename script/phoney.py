@@ -41,7 +41,6 @@ from docopt import docopt
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
-HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-2.0pre1/Linux-x86_64/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
 PATOH_PATH = "/home/para/Downloads/patoh/build/Linux-x86_64/"
 CIRCUT_PATH = "/home/para/dev/circut10612/circut_v1.0612/tests/"
@@ -829,15 +828,18 @@ class Graph():
         Nparts = 2
         UBfactor = 1
         Nruns = 20
-        Ctype = "h1"
-        Rtype = "moderate"
+        Ctype = 1
+        Rtype = 1
         Vcycle = 1
-        dbglvl = 256
+        Reconst = 0
+        dbglvl = 8
         command = ""
         if SIMPLE_GRAPH:
             command = METIS_PATH + "gpmetis " + filename + " 2 -dbglvl=0 -ufactor=30"
         else:
-            command = HMETIS_PATH + "hmetis2.0pre1" + " -ufactor=" + str(UBfactor) + " -nruns=" + str(Nruns) + " -ctype=" + Ctype + " -rtype=" + Rtype + " -nvcycles=" + str(Vcycle) + " -dbglvl=" + str(dbglvl) + " " + filename + " " + str(Nparts)
+            command = HMETIS_PATH + "hmetis " + filename + " " + str(Nparts) + \
+                " " + str(UBfactor) + " " + str(Nruns) + " " + str(Ctype) + " " + \
+                str(Rtype) + " " + str(Vcycle) + " " + str(Reconst) + " " + str(dbglvl)
             logger.info("Calling '%s'", command)
         # call([HMETIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
         call(command.split())
