@@ -16,6 +16,7 @@ Options:
     --algo=algo     0: hMETIS [default: 0]
                     1: PaToH
                     2: Circut
+                    3: Custom partitioner
     --path=path     Full path to the partitioning tool
     --simple-graph  If set, translate the hypergraph into a simple graph
     -h --help       Print this help
@@ -666,6 +667,33 @@ class Graph():
             file.write(s)
 
 
+    def generateCustPartInput(self, filename, edgeWeightType, vertexWeightType):
+        logger.info("Generating Custom Partitioner input file...")
+        logger.debug("Not implemented yet. Come back later.")
+
+        # First find the design width by finding the rightmost cluster boundary
+        width = 0
+        for ck in self.clusters:
+            cluster = self.clusters[ck]
+            if cluster.boundaries[1][1] > width:
+                width = cluster.boundaries[1][1]
+
+        for ck in self.clusters:
+            cluster = self.clusters[ck]
+            cluster.computeDistanceFromOrigin(width)
+
+        clusterList = list(self.clusters.values())
+        clusterList.sort(key=lambda x:x.distOr)
+
+        s = ""
+        for c in clusterList:
+            s += str(c.ID) + "\n"
+            # s += str(c.ID) + " (" + str(c.boundaries[0][0]) + ", " + str(c.boundaries[0][1]) + ")\n"
+
+        with open(filename, 'w') as file:
+            file.write(s)
+
+
 
 
     def computeHyperedgeWeights(self, normalized):
@@ -857,6 +885,7 @@ class Graph():
         logger.info("Running Circut with %s", filename)
         workingDir = os.getcwd()
         tempWorkingDir = CIRCUT_PATH
+        # TODO Change 'tmp.gset' so that I can run several instances.
         tempFile = os.path.join(CIRCUT_PATH, "tmp.gset")
         distantFilename = os.path.join(CIRCUT_PATH, filename.split(os.sep)[-1])
         distantOutFilename = os.path.join(CIRCUT_PATH, outFilename)
@@ -875,6 +904,29 @@ class Graph():
         os.remove(tempFile)
         os.remove(distantFilename)
         os.remove(distantOutFilename)
+
+    def GraphPartitionCustPart(self, filename, outFilename):
+        logger.info("Partitioning like a boss")
+        logger.info("Running custom partitioner with {}".format(filename))
+
+
+        with open(filename, 'r') as f:
+            lines = f.read().splitlines()
+
+        part = dict() # {cluster ID, partition 0 or 1}
+
+        for i, line in enumerate(lines):
+            if i%2 == 0:
+                part[int((line.strip()))] = 0
+            else:
+                part[int((line.strip()))] = 1
+
+        s = ""
+        for k in part:
+            s += str(part[k]) + "\n"
+
+        with open(outFilename, 'w') as f:
+            f.write(s)
 
 
 
@@ -1358,7 +1410,7 @@ class Cluster:
         self.name = name
         self.ID = clusterID
         self.instances = dict() # dictionary of instances. Key: instance name
-        self.boudndaries = [[0, 0], [0 ,0]] # [[lower X, lower U], [upper X, upper Y]] (floats)
+        self.boundaries = [[0, 0], [0 ,0]] # [[lower X, lower U], [upper X, upper Y]] (floats)
         self.area = 0 # float
         self.weights = []   # [0] = area
                             # [1] = power
@@ -1381,13 +1433,14 @@ class Cluster:
         self.powerDensity = 0
         self.isDummy = False
         self.partition = 0 # Partition to which the cluster belongs.
+        self.distOr = 0 # Distance from the origin if all rows were aligned next to each other.
 
 
     def setBoundaries(self, lowerX, lowerY, upperX, upperY):
-        self.boudndaries[0][0] = lowerX
-        self.boudndaries[0][1] = lowerY
-        self.boudndaries[1][0] = upperX
-        self.boudndaries[1][1] = upperY
+        self.boundaries[0][0] = lowerX
+        self.boundaries[0][1] = lowerY
+        self.boundaries[1][0] = upperX
+        self.boundaries[1][1] = upperY
 
     def addInstance(self, instance):
         """
@@ -1432,6 +1485,10 @@ class Cluster:
 
     def setPartition(self, part):
         self.partition = part
+
+    def computeDistanceFromOrigin(self, width):
+        self.distOr = self.boundaries[0][0] + self.boundaries[0][1] * width
+
 
 
 class Hyperedge:
@@ -1722,6 +1779,27 @@ if __name__ == "__main__":
                     graph.generateCircutInput(circutInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartitionCircut(circutInput, circutPartitionFile.split(os.sep)[-1])
                     graph.WritePartitionDirectives(circutPartitionFile, partitionDirectivesFile, gatePerDieFile)
+                    graph.extractPartitions(partitionDirectivesFile)
+                    graph.computePartitionArea()
+                    graph.computePartitionPower()
+
+                elif ALGO == 3: # Custom partitioner
+                    custPartInput = os.path.join(output_dir, "custpart_" + edgeWeightTypesStr[edgeWeightType] + \
+                        "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr")
+                    custPartPartitionFile = custPartInput + ".part.2"
+                    partitionDirectivesFile = custPartInput + ".tcl"
+                    gatePerDieFile = custPartInput + ".part"
+
+                    logger.info("=======================Custom Part=================================")
+                    logger.info("> Edge weight: " + edgeWeightTypesStr[edgeWeightType])
+                    logger.info("> Vertex weight: " + vertexWeightTypesStr[vertexWeightType])
+                    logger.info("==============================================================")
+
+                    graph.generateCustPartInput(custPartInput, edgeWeightType, vertexWeightType)
+                    graph.GraphPartitionCustPart(custPartInput, custPartPartitionFile)
+                    graph.WritePartitionDirectives(custPartPartitionFile, partitionDirectivesFile, gatePerDieFile)
+                    graph.extractPartitionConnectivity(os.path.join(output_dir, "connectivity_partition.txt"), edgeWeightTypesStr[edgeWeightType])
+                    graph.extractPartitionNetLengthCut(os.path.join(output_dir, "cutLength_partition.txt"), edgeWeightTypesStr[edgeWeightType])
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
