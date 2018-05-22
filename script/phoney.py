@@ -48,6 +48,7 @@ CIRCUT_PATH = "/home/para/dev/circut10612/circut_v1.0612/tests/"
 ALGO = 0 # 0: METIS
          # 1: PaToH
          # 2: Circut
+ALGO_DICO = {0: "hMetis", 1: "PaToH", 2: "Circut", 3: "arbitrary-part"}
 EDGE_WEIGHTS_TYPES = 10
 # EDGE_WEIGHTS_TYPES = 1
 VERTEX_WEIGHTS_TYPES = 1
@@ -1626,7 +1627,7 @@ if __name__ == "__main__":
 
     for mydir in dirs:
 
-        output_dir = os.path.join(mydir, "partitions_" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        output_dir = os.path.join(mydir, "partitions_" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_" + str(ALGO_DICO[ALGO]))
         try:
             os.makedirs(output_dir)
         except OSError as e:
