@@ -17,6 +17,7 @@ Options:
                     1: PaToH
                     2: Circut
                     3: Custom partitioner
+                    4: Random partitioner
     --path=path     Full path to the partitioning tool
     --simple-graph  If set, translate the hypergraph into a simple graph
     -h --help       Print this help
@@ -26,7 +27,7 @@ import math
 from subprocess import call
 import subprocess
 import copy
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import threading
 from multiprocessing import Process, Pipe
 import time
@@ -48,7 +49,7 @@ CIRCUT_PATH = "/home/para/dev/circut10612/circut_v1.0612/tests/"
 ALGO = 0 # 0: METIS
          # 1: PaToH
          # 2: Circut
-ALGO_DICO = {0: "hMetis", 1: "PaToH", 2: "Circut", 3: "arbitrary-part"}
+ALGO_DICO = {0: "hMetis", 1: "PaToH", 2: "Circut", 3: "arbitrary-part", 4: "random-part"}
 EDGE_WEIGHTS_TYPES = 10
 # EDGE_WEIGHTS_TYPES = 1
 VERTEX_WEIGHTS_TYPES = 1
@@ -82,7 +83,7 @@ POWER_DENSITIES = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.0
 
 # If True, each cluster contains only one gate.
 # In that case, we assume there are no two identicals nets
-# and there is no need to merge the corresponding hyperedges.
+# and there is no need to merge the corresponding hyperedges
 ONE_TO_ONE = True
 
 def printProgression(current, max):
@@ -670,7 +671,6 @@ class Graph():
 
     def generateCustPartInput(self, filename, edgeWeightType, vertexWeightType):
         logger.info("Generating Custom Partitioner input file...")
-        logger.debug("Not implemented yet. Come back later.")
 
         # First find the design width by finding the rightmost cluster boundary
         width = 0
@@ -929,6 +929,21 @@ class Graph():
         with open(outFilename, 'w') as f:
             f.write(s)
 
+    def GraphPartitionRanPart(self, outFilename):
+        '''
+        Randomly put each cluster in a partition
+        '''
+
+        logger.info("Partitioning randomly")
+
+        s = ""
+
+        for ck in self.clusters:
+            s += str(int(random.uniform(0,2))) + "\n" # 0 or 1
+
+        with open(outFilename, 'w') as f:
+            f.write(s)
+
 
 
 
@@ -1050,6 +1065,7 @@ class Graph():
             str(partCon), str(graphTotNets))
         with open(conFile, 'a') as f:
             f.write(str(len(self.clusters)) + " clusters, " + str(graphTotNets) + " graphTotNets, "  + weigthType + " " + str(partCon) + " " + str(netCutStr) + "\n")
+        return partCon
 
 
     def extractTotalWL(self):
@@ -1804,6 +1820,71 @@ if __name__ == "__main__":
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
+
+                elif ALGO == 4: # Random partitioner
+                    ranPartInput = os.path.join(output_dir, "ranpart_" + edgeWeightTypesStr[edgeWeightType] + \
+                        "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr")
+                    ranPartPartitionFile = ranPartInput + ".part.2"
+                    partitionDirectivesFile = ranPartInput + ".tcl"
+                    gatePerDieFile = ranPartInput + ".part"
+
+                    logger.info("=======================Custom Part=================================")
+                    logger.info("> Edge weight: " + edgeWeightTypesStr[edgeWeightType])
+                    logger.info("> Vertex weight: " + vertexWeightTypesStr[vertexWeightType])
+                    logger.info("==============================================================")
+
+                    # Make dir 'min'
+                    minDir = os.path.join(output_dir, "min")
+                    try:
+                        os.makedirs(minDir)
+                    except OSError as e:
+                        if e.errno != errno.EEXIST:
+                            raise
+                    # Make dir 'max'
+                    maxDir = os.path.join(output_dir, "max")
+                    try:
+                        os.makedirs(maxDir)
+                    except OSError as e:
+                        if e.errno != errno.EEXIST:
+                            raise
+
+                    conMin = -1
+                    conMax = 0
+                    maxIt = 1000
+                    i = maxIt
+
+                    fileList = ["connectivity_partition.txt", "cutLength_partition.txt", ranPartPartitionFile.split(os.sep)[-1], partitionDirectivesFile.split(os.sep)[-1], gatePerDieFile.split(os.sep)[-1]]
+                    while i > 0:
+                        logger.debug("~~~~~~~~~~~~~~~~~~~~~~")
+                        logger.debug("~ Random part #{} ~".format(i))
+                        logger.debug("~~~~~~~~~~~~~~~~~~~~~~")
+                        graph.GraphPartitionRanPart(ranPartPartitionFile)
+                        graph.WritePartitionDirectives(ranPartPartitionFile, partitionDirectivesFile, gatePerDieFile)
+                        newCon = graph.extractPartitionConnectivity(os.path.join(output_dir, "connectivity_partition.txt"), edgeWeightTypesStr[edgeWeightType])
+                        graph.extractPartitionNetLengthCut(os.path.join(output_dir, "cutLength_partition.txt"), edgeWeightTypesStr[edgeWeightType])
+                        graph.extractPartitions(partitionDirectivesFile)
+                        graph.computePartitionArea()
+                        graph.computePartitionPower()
+
+                        if newCon < conMin or conMin == -1:
+                            conMin = newCon
+                            # Copy all outputs to 'min'
+                            for file in fileList:
+                                shutil.copy(os.path.join(output_dir, file), os.path.join(minDir, file))
+                            i = maxIt
+                        elif newCon > conMax:
+                            conMax = newCon
+                            # Copy all outputs to 'max'
+                            for file in fileList:
+                                shutil.copy(os.path.join(output_dir, file), os.path.join(maxDir, file))
+                            i = maxIt
+                        # Delete all outputs, which are the two .txt files, the .part, .part.2 and .tcl.
+                        # raw_hyperedges.out and the log file can be kept. 
+                        # for file in fileList:
+                        #     os.remove(os.path.join(output_dir, file))
+                        i -= 1
+                    logger.info("Final mincut: {}, final maxcut: {}".format(conMin, conMax))
+
 
 
         graph.hammingReport(partitionFiles)
