@@ -1796,6 +1796,8 @@ if __name__ == "__main__":
                     graph.generateCircutInput(circutInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartitionCircut(circutInput, circutPartitionFile.split(os.sep)[-1])
                     graph.WritePartitionDirectives(circutPartitionFile, partitionDirectivesFile, gatePerDieFile)
+                    graph.extractPartitionConnectivity(os.path.join(output_dir, "connectivity_partition.txt"), edgeWeightTypesStr[edgeWeightType])
+                    graph.extractPartitionNetLengthCut(os.path.join(output_dir, "cutLength_partition.txt"), edgeWeightTypesStr[edgeWeightType])
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
