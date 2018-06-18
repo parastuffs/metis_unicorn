@@ -929,7 +929,7 @@ class Graph():
         with open(outFilename, 'w') as f:
             f.write(s)
 
-    def GraphPartitionRanPart(self, outFilename, write_output=True, fileStr=None):
+    def GraphPartitionRanPart(self, outFilename, write_output=True):
         '''
         Randomly put each cluster in a partition
         '''
@@ -949,12 +949,17 @@ class Graph():
 
 
 
-    def WritePartitionDirectives(self, metisFileIn, metisFileOut, gatePerDieFile, write_output=True, partFileStr=None, gpdStr=None, partStr=None):
+    def WritePartitionDirectives(self, metisFileIn, metisFileOut, gatePerDieFile, write_output=True, partStr=None):
         '''
         Create the partition directives in .tcl files.
         This is the final output telling which module (cluster) is going on which die.
         '''
         # print "--------------------------------------------------->"
+
+
+        partFileStr = ""
+        gpdStr = ""
+
         if write_output:
             logger.info("Write tcl file for file: %s", metisFileIn)
             try:
@@ -1055,7 +1060,7 @@ class Graph():
         return totNets
 
 
-    def extractPartitionConnectivity(self, conFile, weigthType, write_output=True, conStr=None):
+    def extractPartitionConnectivity(self, conFile, weigthType, write_output=True):
         partCon = 0 # Connectivity across the partition
         currentPart = 0 # partition of the current hyperedge
         netCutStr = ""
@@ -1083,7 +1088,6 @@ class Graph():
                 f.write(fileStr)
             return partCon
         else:
-            conStr = fileStr
             return partCon, fileStr
 
 
@@ -1101,7 +1105,7 @@ class Graph():
 
 
 
-    def extractPartitionNetLengthCut(self, cutFile, weigthType, write_output=True, cutLenStr=None):
+    def extractPartitionNetLengthCut(self, cutFile, weigthType, write_output=True):
         '''
         Extract the total length of all net cut by the partitioning and
         write it into "cutFile".
@@ -1133,7 +1137,6 @@ class Graph():
             with open(cutFile, 'a') as f:
                 f.write(fileStr)
         else:
-            cutLenStr = fileStr
             return fileStr
 
 
@@ -1910,18 +1913,13 @@ if __name__ == "__main__":
                         for j in range(len(strList)):
                             strList[j] = ""
 
-                        # TODO clean up
-                        strList[2] = graph.GraphPartitionRanPart(ranPartPartitionFile, write_output=False, fileStr=strList[2])
-                        strList[3], strList[4] = graph.WritePartitionDirectives(ranPartPartitionFile, partitionDirectivesFile, gatePerDieFile, write_output=False, partFileStr=strList[3], gpdStr=strList[4], partStr=strList[2])
-                        newCon, strList[0] = graph.extractPartitionConnectivity(conPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False, conStr=strList[0])
-                        # strList[1] = graph.extractPartitionNetLengthCut(cutLenPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False, cutLenStr=strList[1])
+                        strList[2] = graph.GraphPartitionRanPart(ranPartPartitionFile, write_output=False)
+                        strList[3], strList[4] = graph.WritePartitionDirectives(ranPartPartitionFile, partitionDirectivesFile, gatePerDieFile, write_output=False, partStr=strList[2])
+                        newCon, strList[0] = graph.extractPartitionConnectivity(conPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False)
                         graph.extractPartitions(partitionDirectivesFile, readFile=False, partStr=strList[3])
-                        # graph.computePartitionArea()
-                        # graph.computePartitionPower()
-
                         if newCon < conMin or conMin == -1:
                             conMin = newCon
-                            strList[1] = graph.extractPartitionNetLengthCut(cutLenPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False, cutLenStr=strList[1])
+                            strList[1] = graph.extractPartitionNetLengthCut(cutLenPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False)
                             graph.computePartitionArea()
                             graph.computePartitionPower()
                             # Write all outputs to 'min'
@@ -1930,7 +1928,7 @@ if __name__ == "__main__":
                             i = maxIt
                         if newCon > conMax:
                             conMax = newCon
-                            strList[1] = graph.extractPartitionNetLengthCut(cutLenPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False, cutLenStr=strList[1])
+                            strList[1] = graph.extractPartitionNetLengthCut(cutLenPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False)
                             graph.computePartitionArea()
                             graph.computePartitionPower()
                             # Writes all outputs to 'max'
