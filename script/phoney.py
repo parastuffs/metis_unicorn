@@ -929,7 +929,7 @@ class Graph():
         with open(outFilename, 'w') as f:
             f.write(s)
 
-    def GraphPartitionRanPart(self, outFilename):
+    def GraphPartitionRanPart(self, outFilename, write_output=True, fileStr=None):
         '''
         Randomly put each cluster in a partition
         '''
@@ -941,34 +941,37 @@ class Graph():
         for ck in self.clusters:
             s += str(int(random.uniform(0,2))) + "\n" # 0 or 1
 
-        with open(outFilename, 'w') as f:
-            f.write(s)
+        if write_output:
+            with open(outFilename, 'w') as f:
+                f.write(s)
+        else:
+            return s
 
 
 
-
-    def WritePartitionDirectives(self, metisFileIn, metisFileOut, gatePerDieFile):
+    def WritePartitionDirectives(self, metisFileIn, metisFileOut, gatePerDieFile, write_output=True, partFileStr=None, gpdStr=None, partStr=None):
         '''
         Create the partition directives in .tcl files.
         This is the final output telling which module (cluster) is going on which die.
         '''
         # print "--------------------------------------------------->"
-        logger.info("Write tcl file for file: %s", metisFileIn)
-        try:
-            fOut = open(metisFileOut, "w")
-        except IOError as e:
-            logger.error("Can't open file {}".format(metisFileOut))
-            return False
-        try:
-            fIn = open(metisFileIn, "r")
-        except IOError as e:
-            logger.error("Can't open file {}".format(metisFileIn))
-            return False
-        try:
-            fOutGates = open(gatePerDieFile, 'w')
-        except IOError as e:
-            logger.error("Can't open file {}".format(gatePerDieFile))
-            return False
+        if write_output:
+            logger.info("Write tcl file for file: %s", metisFileIn)
+            try:
+                fOut = open(metisFileOut, "w")
+            except IOError as e:
+                logger.error("Can't open file {}".format(metisFileOut))
+                return False
+            try:
+                fIn = open(metisFileIn, "r")
+            except IOError as e:
+                logger.error("Can't open file {}".format(metisFileIn))
+                return False
+            try:
+                fOutGates = open(gatePerDieFile, 'w')
+            except IOError as e:
+                logger.error("Can't open file {}".format(gatePerDieFile))
+                return False
 
         # Find the longest cluster name first.
         # This is necessary in order to align the 'Diex' part
@@ -980,8 +983,11 @@ class Graph():
             if len(cluster.name) > maxLength:
                 maxLength = len(cluster.name)
 
+        if write_output:
+            data = fIn.readlines()
+        else:
+            data = partStr.split('\n')
 
-        data = fIn.readlines()
         if ALGO==1: # In PaToH, everything is on one single line.
             data = data[0].split()
 
@@ -1027,11 +1033,18 @@ class Graph():
             for instance in cluster.instances.keys():
                 sInst += str(instance) + " " + str(data[i])
 
-            fOut.write(s)
-            fOutGates.write(sInst)
-        fOut.close()
-        fIn.close()
-        fOutGates.close()
+            if write_output:
+                fOut.write(s)   
+                fOutGates.write(sInst)
+            else:
+                partFileStr += s + "\n"
+                gpdStr += sInst + "\n"
+        if write_output:
+            fOut.close()
+            fIn.close()
+            fOutGates.close()
+        else:
+            return partFileStr, gpdStr
         logger.info("Done!")
         # print "<---------------------------------------------------\n"
 
@@ -1042,11 +1055,12 @@ class Graph():
         return totNets
 
 
-    def extractPartitionConnectivity(self, conFile, weigthType):
+    def extractPartitionConnectivity(self, conFile, weigthType, write_output=True, conStr=None):
         partCon = 0 # Connectivity across the partition
         currentPart = 0 # partition of the current hyperedge
         netCutStr = ""
         graphTotNets = self.extractGraphNets()
+        fileStr = ""
 
         for hyperedge in self.hyperedges:
             for i, cluster in enumerate(hyperedge.clusters):
@@ -1063,9 +1077,14 @@ class Graph():
 
         logger.info("------------- Number of nets cut by the partitioning: %s out of %s -------------", 
             str(partCon), str(graphTotNets))
-        with open(conFile, 'a') as f:
-            f.write(str(len(self.clusters)) + " clusters, " + str(graphTotNets) + " graphTotNets, "  + weigthType + " " + str(partCon) + " " + str(netCutStr) + "\n")
-        return partCon
+        fileStr = str(len(self.clusters)) + " clusters, " + str(graphTotNets) + " graphTotNets, "  + weigthType + " " + str(partCon) + " " + str(netCutStr) + "\n"
+        if write_output:
+            with open(conFile, 'a') as f:
+                f.write(fileStr)
+            return partCon
+        else:
+            conStr = fileStr
+            return partCon, fileStr
 
 
     def extractTotalWL(self):
@@ -1082,7 +1101,7 @@ class Graph():
 
 
 
-    def extractPartitionNetLengthCut(self, cutFile, weigthType):
+    def extractPartitionNetLengthCut(self, cutFile, weigthType, write_output=True, cutLenStr=None):
         '''
         Extract the total length of all net cut by the partitioning and
         write it into "cutFile".
@@ -1096,6 +1115,7 @@ class Graph():
         totLen = 0
         currentPart = 0
         graphTotLen = self.extractTotalWL()
+        fileStr = ""
 
         for hyperedge in self.hyperedges:
             for i, cluster in enumerate(hyperedge.clusters):
@@ -1106,8 +1126,16 @@ class Graph():
                         totLen += hyperedge.getTotNetLength()
                         break
         logger.info("><><><><><><><>< total net length cut by the partitioning: %s, out of %s", str(totLen), str(graphTotLen))
-        with open(cutFile, 'a') as f:
-            f.write(str(len(self.clusters)) + " clusters, " + str(graphTotLen) + " graphTotLen, " + weigthType + " " + str(totLen) + "\n")
+
+        fileStr = str(len(self.clusters)) + " clusters, " + str(graphTotLen) + " graphTotLen, " + weigthType + " " + str(totLen) + "\n"
+        
+        if write_output:
+            with open(cutFile, 'a') as f:
+                f.write(fileStr)
+        else:
+            cutLenStr = fileStr
+            return fileStr
+
 
 
 
@@ -1225,24 +1253,29 @@ class Graph():
         logger.info("Power: %s %s", str(self.partitionsPower), str(powerFraction))
 
 
-    def extractPartitions(self, partitionFile):
+    def extractPartitions(self, partitionFile, readFile=True, partStr=None):
         logger.info("Extracting partitions directives.")
-        with open(partitionFile, 'r') as f:
-            lines = f.read().splitlines()
+
+        if readFile:
+            with open(partitionFile, 'r') as f:
+                lines = f.read().splitlines()
+        else:
+            lines = partStr.split('\n')
 
         for i in xrange(0, 2):
             self.partitions.append(list())
 
         for line in lines:
             lineData = line.split()
-            if lineData[2] != DUMMY_NAME:
-                try:
-                    cluster = self.clusters[lineData[2]]
-                except KeyError:
-                    pass
-                else:
-                    partitionIndex = int(lineData[4][3]) # Fourth character of 'DieX'
-                    self.partitions[partitionIndex].append(cluster)
+            if len(lineData) > 0:
+                if lineData[2] != DUMMY_NAME:
+                    try:
+                        cluster = self.clusters[lineData[2]]
+                    except KeyError:
+                        pass
+                    else:
+                        partitionIndex = int(lineData[4][3]) # Fourth character of 'DieX'
+                        self.partitions[partitionIndex].append(cluster)
 
 
 
@@ -1602,6 +1635,11 @@ def initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr):
 
 
 
+def writeOutput(directory, strToWrite):
+    print("Writing into {}".format(directory))
+    with open(directory, 'w') as f:
+        f.write(strToWrite)
+
 
 if __name__ == "__main__":
     dirs = []
@@ -1827,8 +1865,15 @@ if __name__ == "__main__":
                     ranPartInput = os.path.join(output_dir, "ranpart_" + edgeWeightTypesStr[edgeWeightType] + \
                         "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr")
                     ranPartPartitionFile = ranPartInput + ".part.2"
+                    ranPartPartitionFileStr = ""
                     partitionDirectivesFile = ranPartInput + ".tcl"
+                    partitionDirectivesFileStr = ""
                     gatePerDieFile = ranPartInput + ".part"
+                    gatePerDieFileStr = ""
+                    conPartFile = os.path.join(output_dir, "connectivity_partition.txt")
+                    conPartFileStr = ""
+                    cutLenPartFile = os.path.join(output_dir, "cutLength_partition.txt")
+                    cutLenPartFileStr = ""
 
                     logger.info("=======================Custom Part=================================")
                     logger.info("> Edge weight: " + edgeWeightTypesStr[edgeWeightType])
@@ -1852,38 +1897,46 @@ if __name__ == "__main__":
 
                     conMin = -1
                     conMax = 0
-                    maxIt = 1000
+                    maxIt = 200
                     i = maxIt
 
                     fileList = ["connectivity_partition.txt", "cutLength_partition.txt", ranPartPartitionFile.split(os.sep)[-1], partitionDirectivesFile.split(os.sep)[-1], gatePerDieFile.split(os.sep)[-1]]
+                    strList = [conPartFileStr, cutLenPartFileStr, ranPartPartitionFileStr, partitionDirectivesFileStr, gatePerDieFileStr] # Needs to be in the same order as fileList.
                     while i > 0:
                         logger.debug("~~~~~~~~~~~~~~~~~~~~~~")
                         logger.debug("~ Random part #{} ~".format(i))
                         logger.debug("~~~~~~~~~~~~~~~~~~~~~~")
-                        graph.GraphPartitionRanPart(ranPartPartitionFile)
-                        graph.WritePartitionDirectives(ranPartPartitionFile, partitionDirectivesFile, gatePerDieFile)
-                        newCon = graph.extractPartitionConnectivity(os.path.join(output_dir, "connectivity_partition.txt"), edgeWeightTypesStr[edgeWeightType])
-                        graph.extractPartitionNetLengthCut(os.path.join(output_dir, "cutLength_partition.txt"), edgeWeightTypesStr[edgeWeightType])
-                        graph.extractPartitions(partitionDirectivesFile)
-                        graph.computePartitionArea()
-                        graph.computePartitionPower()
+                        # Reset strings
+                        for j in range(len(strList)):
+                            strList[j] = ""
+
+                        # TODO clean up
+                        strList[2] = graph.GraphPartitionRanPart(ranPartPartitionFile, write_output=False, fileStr=strList[2])
+                        strList[3], strList[4] = graph.WritePartitionDirectives(ranPartPartitionFile, partitionDirectivesFile, gatePerDieFile, write_output=False, partFileStr=strList[3], gpdStr=strList[4], partStr=strList[2])
+                        newCon, strList[0] = graph.extractPartitionConnectivity(conPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False, conStr=strList[0])
+                        # strList[1] = graph.extractPartitionNetLengthCut(cutLenPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False, cutLenStr=strList[1])
+                        graph.extractPartitions(partitionDirectivesFile, readFile=False, partStr=strList[3])
+                        # graph.computePartitionArea()
+                        # graph.computePartitionPower()
 
                         if newCon < conMin or conMin == -1:
                             conMin = newCon
-                            # Copy all outputs to 'min'
-                            for file in fileList:
-                                shutil.copy(os.path.join(output_dir, file), os.path.join(minDir, file))
+                            strList[1] = graph.extractPartitionNetLengthCut(cutLenPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False, cutLenStr=strList[1])
+                            graph.computePartitionArea()
+                            graph.computePartitionPower()
+                            # Write all outputs to 'min'
+                            for j in range(len(fileList)):
+                                writeOutput(os.path.join(minDir, fileList[j]), strList[j])
                             i = maxIt
-                        elif newCon > conMax:
+                        if newCon > conMax:
                             conMax = newCon
-                            # Copy all outputs to 'max'
-                            for file in fileList:
-                                shutil.copy(os.path.join(output_dir, file), os.path.join(maxDir, file))
+                            strList[1] = graph.extractPartitionNetLengthCut(cutLenPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False, cutLenStr=strList[1])
+                            graph.computePartitionArea()
+                            graph.computePartitionPower()
+                            # Writes all outputs to 'max'
+                            for j in range(len(fileList)):
+                                writeOutput(os.path.join(maxDir, fileList[j]), strList[j])
                             i = maxIt
-                        # Delete all outputs, which are the two .txt files, the .part, .part.2 and .tcl.
-                        # raw_hyperedges.out and the log file can be kept. 
-                        # for file in fileList:
-                        #     os.remove(os.path.join(output_dir, file))
                         i -= 1
                     logger.info("Final mincut: {}, final maxcut: {}".format(conMin, conMax))
 
