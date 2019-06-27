@@ -28,13 +28,14 @@ The connectivity partition file should be as follow:
 <Amount of clusters> clusters, <Total number of nets> graphTotNets, <weight i> <number of n nets cut>, <net cut 1>, ... <net cut n>
 
 """
-
+from __future__ import division
 from docopt import docopt
 import re
 import statistics
 import math
 import numpy as np
 import os
+import matplotlib.pyplot as plt
 
 # TODO this analysis is only done for the first partitioning weight (first line in connectivity_partition.txt file).
 
@@ -94,7 +95,7 @@ def Evaluate3DLength(partFile, clusterFile, cellFile, netCutFile):
                 if partGates[gates[i]] != partGates[gates[j]]:
                     # Manhattan distance is the half-perimeter length of the bounding box containing the two gates.
                     # In other words, the sum of the difference between their two coordinates.
-                    manDist = abs(gatesCoord[gates[i]][0] - gatesCoord[gates[j]][0] + gatesCoord[gates[i]][1] - gatesCoord[gates[j]][1])
+                    manDist = abs(gatesCoord[gates[i]][0] - gatesCoord[gates[j]][0]) + abs(gatesCoord[gates[i]][1] - gatesCoord[gates[j]][1])
                     manDists.append(manDist)
 
 
@@ -122,6 +123,35 @@ def Evaluate3DLength(partFile, clusterFile, cellFile, netCutFile):
     q3man = np.percentile(manDists, 75)
     width = q3man * (1.0 - (1.0/math.sqrt(2)))
     print("With 1st quartile 2D Manhattan distance of {} um, the 3D width should be at most {} um.".format(q3man, width))
+
+
+    # Boxplot des distances de Manhattan des fils coupes.
+    # plt.boxplot(manDists)
+    # plt.show()
+
+    # Plot 3D width as a function of Manhattan distance
+    xValues = np.linspace(min(manDists),max(manDists),50)
+    yValues = list()
+    for x in xValues:
+        yValues.append(x * (1 - (1/math.sqrt(2))))
+    plt.plot(xValues, yValues)
+    plt.show()
+
+    # Plot 3D width as a function of the number of wires cut
+    min3DWidth = min(manDists) * (1 - (1/math.sqrt(2)))
+    max3DWidth = max(manDists) * (1 - (1/math.sqrt(2)))
+    yValues = np.linspace(min3DWidth,max3DWidth,50)
+    xValues = list()
+    manDists.sort()
+    for y in yValues:
+        xValues.append(len([i for i in manDists if i > (y / (1 - 1/math.sqrt(2)))]))
+    print(xValues)
+    print(yValues)
+    plt.plot(xValues, yValues)
+    # plt.show()
+
+
+
 
 
 
