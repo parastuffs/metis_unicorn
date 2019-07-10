@@ -1,8 +1,10 @@
 """
 PHONEY [Pronounce 'poney'], Partitioning of Hypergraph Obviously Not EasY
 
-Note: It is very important at the moment that the clusters have the same ID as their
-position in the Graph.clusters list.
+Note: - It is very important at the moment that the clusters have the same ID as their
+        position in the Graph.clusters list.
+      - All .out files should be in the same <dir> folder. However, the script will 
+        look the parent folder if they can't be found.
 
 Usage:
     phoney.py   [-d <dir>] [-w <weight>] [--seed=seed] [--algo=algo] [--path=path]
@@ -367,8 +369,12 @@ class Graph():
 
     def readNetsWireLength(self, filename, hrows, frows):
         logger.info("Reading wire length nets file: %s", filename)
-        with open(filename, 'r') as f:
-            lines = f.read().splitlines()
+        try:
+            with open(filename, 'r') as f:
+                lines = f.read().splitlines()
+        except IOError:
+            with open(os.sep.join([os.sep.join(filename.split(os.sep)[:-2]), filename.split(os.sep)[-1]]), 'r') as f:
+                lines = f.read().splitlines()
 
         # Remove the header lines
         for i in xrange(0, hrows):
@@ -397,8 +403,12 @@ class Graph():
 
     def readNets(self, filename, hrows, frows):
         logger.info("Reading nets file: %s", filename)
-        with open(filename, 'r') as f:
-            lines = f.read().splitlines()
+        try:
+            with open(filename, 'r') as f:
+                lines = f.read().splitlines()
+        except IOError:
+            with open(os.sep.join([os.sep.join(filename.split(os.sep)[:-2]), filename.split(os.sep)[-1]]), 'r') as f:
+                lines = f.read().splitlines()
 
         # Remove the header lines
         for i in xrange(0, hrows):
@@ -1129,7 +1139,7 @@ class Graph():
                     if currentPart != cluster.partition:
                         totLen += hyperedge.getTotNetLength()
                         break
-        logger.info("><><><><><><><>< total net length cut by the partitioning: %s, out of %s", str(totLen), str(graphTotLen))
+        logger.info("><><><><><><><>< total net length cut by the partitioning: %s out of %s", str(totLen), str(graphTotLen))
 
         fileStr = str(len(self.clusters)) + " clusters, " + str(graphTotLen) + " graphTotLen, " + weigthType + " " + str(totLen) + "\n"
         
@@ -1463,7 +1473,7 @@ class Cluster:
         self.name = name
         self.ID = clusterID
         self.instances = dict() # dictionary of instances. Key: instance name
-        self.boundaries = [[0, 0], [0 ,0]] # [[lower X, lower U], [upper X, upper Y]] (floats)
+        self.boundaries = [[0, 0], [0 ,0]] # [[lower X, lower Y], [upper X, upper Y]] (floats)
         self.area = 0 # float
         self.weights = []   # [0] = area
                             # [1] = power
@@ -1591,6 +1601,8 @@ class Instance:
         self.name = name
         self.cluster = None # Cluster object to which this instance belongs
         self.nets = list() # List of Net object that are connecting this instance.
+        self.x = 0
+        self.y = 0
 
     def addCluster(self, cluster):
         self.cluster = cluster
