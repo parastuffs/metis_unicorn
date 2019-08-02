@@ -87,9 +87,16 @@ def splitFile(rootDir, depth, ps):
 		part1Nets = Set()
 		part0InstPerNet = dict()
 		part1InstPerNet = dict()
-		with open(os.path.join(rootDir,"InstancesPerNet.out"), 'r') as f:
-			line = f.readline().strip()
-			while line:
+		filepath = os.path.join(rootDir,"InstancesPerNet.out")
+		try:
+			with open(filepath, 'r') as f:
+				lines = f.read().splitlines()
+		except IOError:
+			with open(os.sep.join([os.sep.join(filepath.split(os.sep)[:-2]), filepath.split(os.sep)[-1]]), 'r') as f:
+				lines = f.read().splitlines()
+		finally:
+			for line in lines:
+				line = line.strip()
 				# line: <net> <instance 1> <...> <instance n>
 
 				net = line.split(' ')[0]
@@ -106,7 +113,6 @@ def splitFile(rootDir, depth, ps):
 						part1InstPerNet[net].append(instance)
 					else:
 						print("InstancesPerNet: Error, did not find instance '%s' in partition sets.", instance)
-				line = f.readline().strip()
 
 
 		# Remove empty entries from the dictionary.
@@ -124,21 +130,37 @@ def splitFile(rootDir, depth, ps):
 		s = ""
 		for net in part0Nets:
 			s += net + "\n"
-		with open(os.path.join(subPartDir0,"Nets.out"), 'w') as f:
-			f.write(s)
+		filepath = os.path.join(subPartDir0,"Nets.out")
+		try:
+			with open(filepath, 'w') as f:
+				f.write(s)
+		except IOError:
+			with open(os.sep.join([os.sep.join(filepath.split(os.sep)[:-2]), filepath.split(os.sep)[-1]]), 'w') as f:
+				f.write(s)
 		s = ""
 		for net in part1Nets:
 			s += net + "\n"
-		with open(os.path.join(subPartDir1,"Nets.out"), 'w') as f:
-			f.write(s)
+		filepath = os.path.join(subPartDir1,"Nets.out")
+		try:
+			with open(filepath, 'w') as f:
+				f.write(s)
+		except IOError:
+			with open(os.sep.join([os.sep.join(filepath.split(os.sep)[:-2]), filepath.split(os.sep)[-1]]), 'w') as f:
+				f.write(s)
 
 		s0 = "NET  NUM_PINS  LENGTH"
 		s1 = "NET  NUM_PINS  LENGTH"
-		with open(os.path.join(rootDir,"WLnets.out"), 'r') as f:
-			line = f.readline().strip()
+		filepath = os.path.join(rootDir,"WLnets.out")
+		try:
+			with open(filepath, 'r') as f:
+				lines = f.read().splitlines()
+		except IOError:
+			with open(os.sep.join([os.sep.join(filepath.split(os.sep)[:-2]), filepath.split(os.sep)[-1]]), 'r') as f:
+				lines = f.read().splitlines()
+		finally:
 			# Skip the first line.
-			line = f.readline().strip()
-			while line:
+			for line in lines[1:]:
+				line = line.strip()
 				# line: <net> <pins> <length>
 				net = line.split(' ')[0]
 				if net in part0Nets:
@@ -147,8 +169,7 @@ def splitFile(rootDir, depth, ps):
 					s1 += line + "\n"
 				# else:
 					# print("Error, could not find net '%s' in partition sets.", net)
-					# Empty nets can be silently ignored. 
-				line = f.readline().strip()
+					# Empty nets can be silently ignored.
 
 		with open(os.path.join(subPartDir0,"WLnets.out"), 'w') as f:
 			f.write(s0)
@@ -288,10 +309,10 @@ def mergeClusters(dirs, rootDir):
 			raise
 
 	# First copy the unchanged files.
-	shutil.copy(os.path.join(rootDir, "CellCoord.out"), progClustDir)
-	shutil.copy(os.path.join(rootDir, "InstancesPerNet.out"), progClustDir)
-	shutil.copy(os.path.join(rootDir, "Nets.out"), progClustDir)
-	shutil.copy(os.path.join(rootDir, "WLnets.out"), progClustDir)
+	# shutil.copy(os.path.join(rootDir, "CellCoord.out"), progClustDir)
+	# shutil.copy(os.path.join(rootDir, "InstancesPerNet.out"), progClustDir)
+	# shutil.copy(os.path.join(rootDir, "Nets.out"), progClustDir)
+	# shutil.copy(os.path.join(rootDir, "WLnets.out"), progClustDir)
 
 	clustersInstances = ""
 	clustersArea = [0] * len(dirs)
@@ -359,7 +380,8 @@ if __name__ == "__main__":
 			if opt == "-r":
 				reuse = True
 		if rootDir == "":
-			rootDir = "/home/para/dev/def_parser/2018-03-14_17-00-18/ldpc-4x4-serial_random_0"
+			# rootDir = "/home/para/dev/def_parser/2018-03-14_17-00-18/ldpc-4x4-serial_random_0"
+			rootDir = "/home/para/dev/def_parser/2019-03-07_11-41-34_ldpc_OneToOne/ldpc_progressive-wl_0"
 		if phoneyScript == "":
 			phoneyScript = "/home/para/dev/metis_unicorn/script/phoney.py"
 		if depth is None:
