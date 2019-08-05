@@ -1766,7 +1766,7 @@ if __name__ == "__main__":
                 t1 = time.time()
                 logger.debug("time: %s", str(t1-t0))
             # Begin with the netWL file, as there are less nets there.
-            graph.readNetsWireLength(netsWL, 14, 2)
+            graph.readNetsWireLength(netsWL, 1, 0)
             graph.readNets(netsInstances, 0, 0)
 
             t0 = time.time()
