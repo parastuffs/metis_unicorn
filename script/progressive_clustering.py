@@ -148,8 +148,8 @@ def splitFile(rootDir, depth, ps):
 			with open(os.sep.join([os.sep.join(filepath.split(os.sep)[:-2]), filepath.split(os.sep)[-1]]), 'w') as f:
 				f.write(s)
 
-		s0 = "NET  NUM_PINS  LENGTH"
-		s1 = "NET  NUM_PINS  LENGTH"
+		s0 = "NET  NUM_PINS  LENGTH\n"
+		s1 = "NET  NUM_PINS  LENGTH\n"
 		filepath = os.path.join(rootDir,"WLnets.out")
 		try:
 			with open(filepath, 'r') as f:
@@ -257,7 +257,6 @@ def recycleTree(rootDir, depth):
 	@rootDir: full os path
 	@return: None or rootDir in an array
 	'''
-
 	if depth > 0:
 		finalDirs = []
 		isPartDir = False
