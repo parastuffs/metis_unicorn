@@ -22,7 +22,7 @@ else:
 
 
 fileLines = [] #List of all the lines in the file
-csvout = ""
+csvout = "NET NUM_PINS LENGTH CUT"
 i = 0
 with open(infile, 'r') as f:
 	fileLines = f.readlines()
