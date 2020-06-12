@@ -35,7 +35,7 @@ from multiprocessing import Process, Pipe
 import time
 import pickle
 import random
-from sets import Set
+# from sets import Set
 import os
 import datetime
 import sys
@@ -197,10 +197,10 @@ class Graph():
             lines = f.read().splitlines()
 
         # Remove the header lines
-        for i in xrange(0, hrows):
+        for i in range(0, hrows):
             del lines[0]
         # Remove the footer lines
-        for i in xrange(0,frows):
+        for i in range(0,frows):
             del lines[-1]
 
         if CLUSTER_INPUT_TYPE == 0:
@@ -242,10 +242,10 @@ class Graph():
 
         if CLUSTER_INPUT_TYPE == 0:
             # Remove the header lines
-            for i in xrange(0, hrows):
+            for i in range(0, hrows):
                 del lines[0]
             # Remove the footer lines
-            for i in xrange(0,frows):
+            for i in range(0,frows):
                 del lines[-1]
 
             for line in lines:
@@ -293,13 +293,13 @@ class Graph():
             lines = f.read().splitlines()
 
         # Remove the header lines
-        for i in xrange(0, hrows):
+        for i in range(0, hrows):
             del lines[0]
         # Remove the footer lines
-        for i in xrange(0,frows):
+        for i in range(0,frows):
             del lines[-1]
 
-        for i in xrange(0, len(lines)):
+        for i in range(0, len(lines)):
             lines[i] = " ".join(lines[i].split())
 
         i = 0
@@ -324,7 +324,7 @@ class Graph():
                     memoryBlock.addInstance(instance)
                     self.clusters[memoryBlock.name] = memoryBlock
 
-                    for j in xrange(1, int(blockRow[2])):
+                    for j in range(1, int(blockRow[2])):
                         i += 1
                         line = lines[i]
                         subBlockRow = line.split()
@@ -349,7 +349,7 @@ class Graph():
                             break
                         k += 1
 
-                    for j in xrange(1, int(blockRow[2])):
+                    for j in range(1, int(blockRow[2])):
                         i += 1
                         line = lines[i]
                         subBlockRow = line.split()
@@ -377,13 +377,13 @@ class Graph():
                 lines = f.read().splitlines()
 
         # Remove the header lines
-        for i in xrange(0, hrows):
+        for i in range(0, hrows):
             del lines[0]
         # Remove the footer lines
-        for i in xrange(0,frows):
+        for i in range(0,frows):
             del lines[-1]
 
-        for i in xrange(0, len(lines)):
+        for i in range(0, len(lines)):
             lines[i] = " ".join(lines[i].split())
         lines.sort()
 
@@ -411,10 +411,10 @@ class Graph():
                 lines = f.read().splitlines()
 
         # Remove the header lines
-        for i in xrange(0, hrows):
+        for i in range(0, hrows):
             del lines[0]
         # Remove the footer lines
-        for i in xrange(0,frows):
+        for i in range(0,frows):
             del lines[-1]
 
         lines.sort()
@@ -612,9 +612,9 @@ class Graph():
                 # print cluster
                 cluster = self.clusters[key]
                 s += "\n"
-                for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+                for weightType in range(0, VERTEX_WEIGHTS_TYPES):
                     s += str(cluster.weightsNormalized[weightType]) + " "
-                # for j in xrange(0, len(cluster.connectedClusters)):
+                # for j in range(0, len(cluster.connectedClusters)):
                 for j, clusterName in enumerate(cluster.connectedClusters):
                     s += " " + str(self.clusters[clusterName].ID + 1) + \
                         " " + str(cluster.connectedEdges[j].weightsNormalized[edgeWeightType])
@@ -711,7 +711,7 @@ class Graph():
         logger.info("Generating weights of hyperedges.")
 
         self.hyperedgeWeightsMax = [0] * EDGE_WEIGHTS_TYPES
-        for weightType in xrange(0, EDGE_WEIGHTS_TYPES):
+        for weightType in range(0, EDGE_WEIGHTS_TYPES):
             for i, hyperedge in enumerate(self.hyperedges):
                 weight = 0
                 if weightType == 0:
@@ -798,7 +798,7 @@ class Graph():
         totalPower = 0
         totalNormalizedPower = 0
 
-        for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+        for weightType in range(0, VERTEX_WEIGHTS_TYPES):
             # Weight = cluster area
             if weightType == 0:
                 for key in self.clusters:
@@ -826,7 +826,7 @@ class Graph():
         # Normalization
         for key in self.clusters:
             cluster = self.clusters[key]
-            for weightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+            for weightType in range(0, VERTEX_WEIGHTS_TYPES):
                 weight = ((cluster.weights[weightType] * MAX_WEIGHT) / self.clusterWeightsMax[weightType]) + 1
                 cluster.setWeightNormalized(weightType, int(weight))
                 if weightType == 1:
@@ -904,7 +904,7 @@ class Graph():
         with open(tempFile, 'w') as f:
             f.write(filename.split(os.sep)[-1] + "\n")
         command = "./circut < tmp.gset"
-        print command
+        print(command)
         os.chdir(tempWorkingDir)
         # TODO find a fracking way to get the output of the called command in the calling script. I want it in the log.
         child = subprocess.Popen(command, shell=True, stdout=None)
@@ -1183,19 +1183,19 @@ class Graph():
 
             with open(filename, 'r') as f:
                 lines = f.read().splitlines()
-                for i in xrange(0, len(lines)):
+                for i in range(0, len(lines)):
                     lines[i] = lines[i].strip(' \n')
                 partitions.append(lines)
                 # print lines
 
         table += "\n"
 
-        for i in xrange(0, len(partitions) - 1): # ommit the last line, it has already been done as the last column
+        for i in range(0, len(partitions) - 1): # ommit the last line, it has already been done as the last column
             table += str(i) + "\t" # Row name
             table += "\t" * i
-            for j in xrange(i + 1, len(partitions)):
+            for j in range(i + 1, len(partitions)):
                 hammingDistance = 0
-                for bit in xrange(0, len(partitions[i])):
+                for bit in range(0, len(partitions[i])):
                     if partitions[i][bit] != partitions[j][bit]:
                         hammingDistance += 1
                 # Hamming distance normalized, limited to two decimal points
@@ -1215,13 +1215,13 @@ class Graph():
         # weights = [0] * EDGE_WEIGHTS_TYPES
         weights = []
         styles = ['b', 'r', 'g', 'c', 'm', 'y', 'k']
-        for i in xrange(0, EDGE_WEIGHTS_TYPES):
+        for i in range(0, EDGE_WEIGHTS_TYPES):
             weights.append(list())
         for hyperedge in self.hyperedges:
-            for i in xrange (0, EDGE_WEIGHTS_TYPES):
+            for i in range (0, EDGE_WEIGHTS_TYPES):
                 weights[i].append(hyperedge.weightsNormalized[i])
         logger.info(weights[0])
-        for i in xrange(0, EDGE_WEIGHTS_TYPES):
+        for i in range(0, EDGE_WEIGHTS_TYPES):
             plt.plot(weights[i], styles[i])
         plt.show()
 
@@ -1275,7 +1275,7 @@ class Graph():
         else:
             lines = partStr.split('\n')
 
-        for i in xrange(0, 2):
+        for i in range(0, 2):
             self.partitions.append(list())
 
         for line in lines:
@@ -1367,7 +1367,7 @@ class Graph():
         unmatchableClusters = [] # List of cluster IDs for which lower density
                                 # cluster could not be found in partition 1.
 
-        # for i in xrange(0, 10):
+        # for i in range(0, 10):
         #     print "RUN #" + str(i)
         #     highDenCluster, highDen = self.findHighestDensityCluster(self.partitions[0], unmatchableClusters)
         #     highDenArea = self.partitions[0][highDenCluster].area
@@ -1440,7 +1440,7 @@ class Net:
         self.wl = 0.0 # wire length
         self.instances = dict() # dictionary of instances. Key: instance name
         self.pins = 0 # number of pins
-        self.clusters = Set() # set of clusters. Having a Set is an advantage because it only containts unique objects.
+        self.clusters = set() # set of clusters. Having a Set is an advantage because it only containts unique objects.
 
     def setPinAmount(self, pins):
         self.pins = pins
@@ -1558,7 +1558,7 @@ class Hyperedge:
     def __init__(self):
         self.nets = [] # list of Nets
         self.clusters = [] # list of Clusters
-        self.clustersNames = Set()
+        self.clustersNames = set()
         self.weights = []   # [0] = Number of wires
                             # [1] = Wire length
                             # [2] = 1/number of wires
@@ -1617,7 +1617,7 @@ def initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr):
     '''
 
     # TODO sub-optimial loop. Why did I use all those if?
-    for edgeWeightType in xrange(0, EDGE_WEIGHTS_TYPES):
+    for edgeWeightType in range(0, EDGE_WEIGHTS_TYPES):
         if edgeWeightType == 0:
             edgeWeightTypesStr.append("01_NoWires")
         if edgeWeightType == 1:
@@ -1642,7 +1642,7 @@ def initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr):
     if SIMPLE_GRAPH and VERTEX_WEIGHTS_TYPES == 2:
         vertexWeightTypesStr.append("area-power")
     else:
-        for vertexWeightType in xrange(0, VERTEX_WEIGHTS_TYPES):
+        for vertexWeightType in range(0, VERTEX_WEIGHTS_TYPES):
             if vertexWeightType == 0:
                 vertexWeightTypesStr.append("area")
             elif vertexWeightType == 1:
@@ -1660,7 +1660,7 @@ if __name__ == "__main__":
     dirs = []
     EDGE_WEIGHTS_TYPES = 0
     args = docopt(__doc__)
-    print args
+    print(args)
     if args["-d"]:
         dirs.append(args["-d"])
     else:
@@ -1790,8 +1790,8 @@ if __name__ == "__main__":
 
         partitionFiles = []
 
-        for edgeWeightType in xrange(0, len(edgeWeightTypesStr)):
-            for vertexWeightType in xrange(0, len(vertexWeightTypesStr)):
+        for edgeWeightType in range(0, len(edgeWeightTypesStr)):
+            for vertexWeightType in range(0, len(vertexWeightTypesStr)):
                 if ALGO == 0: # METIS
                     metisInput = os.path.join(output_dir, "metis_" + edgeWeightTypesStr[edgeWeightType] + \
                         "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr")
