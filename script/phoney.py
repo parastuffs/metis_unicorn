@@ -42,6 +42,7 @@ import sys
 import logging, logging.config
 import shutil
 from docopt import docopt
+import statistics
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
@@ -717,6 +718,16 @@ class Graph():
                 if weightType == 0:
                     # Number of wires
                     weight = hyperedge.connectivity
+
+                    ###
+                    # Experimental
+                    #
+                    pins = list()
+                    for n in hyperedge.nets:
+                        pins.append(n.pins)
+                    weight = weight ** statistics.mean(pins)
+                    #
+                    ###
                 elif weightType == 1:
                     # 1/#wires
                     weight = 1.0 / hyperedge.weights[0]
