@@ -722,10 +722,12 @@ class Graph():
                     ###
                     # Experimental
                     #
-                    pins = list()
-                    for n in hyperedge.nets:
-                        pins.append(n.pins)
-                    weight = weight ** statistics.mean(pins)
+                    # pins = list()
+                    # wl = 0
+                    # for n in hyperedge.nets:
+                    #     pins.append(n.pins)
+                    #     wl += n.wl
+                    # weight = statistics.mean(pins) / wl
                     #
                     ###
                 elif weightType == 1:
@@ -1014,8 +1016,11 @@ class Graph():
         else:
             data = partStr.split('\n')
 
-        if ALGO==1: # In PaToH, everything is on one single line.
-            data = data[0].split()
+        if ALGO==1: # In PaToH, everything is on one or more lines.
+            tmpData = list()
+            for l in range(len(data)):
+                tmpData.extend(data[l].strip().split(' '))
+            data = tmpData
 
         if ALGO==2: # Circut, die is -1 or 1. Change all -1 to 0.
             del data[0] # Remove the first header line
@@ -1832,6 +1837,7 @@ if __name__ == "__main__":
                         "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr")
                     patohPartitionFile = patohInput + ".part.2"
                     partitionDirectivesFile = patohInput + ".tcl"
+                    gatePerDieFile = patohInput + ".part"
 
                     logger.info("=======================PaToH=================================")
                     logger.info("> Edge weight: " + edgeWeightTypesStr[edgeWeightType])
@@ -1840,7 +1846,9 @@ if __name__ == "__main__":
 
                     graph.generatePaToHInput(patohInput, edgeWeightType, vertexWeightType)
                     graph.GraphPartitionPaToH(patohInput)
-                    graph.WritePartitionDirectives(patohPartitionFile, partitionDirectivesFile)
+                    graph.WritePartitionDirectives(patohPartitionFile, partitionDirectivesFile, gatePerDieFile)
+                    graph.extractPartitionConnectivity(os.path.join(output_dir, "connectivity_partition.txt"), edgeWeightTypesStr[edgeWeightType])
+                    graph.extractPartitionNetLengthCut(os.path.join(output_dir, "cutLength_partition.txt"), edgeWeightTypesStr[edgeWeightType])
                     graph.extractPartitions(partitionDirectivesFile)
                     graph.computePartitionArea()
                     graph.computePartitionPower()
