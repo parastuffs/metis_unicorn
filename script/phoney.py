@@ -1062,7 +1062,7 @@ class Graph():
                 s+= "\n"
 
             for instance in cluster.instances.keys():
-                sInst += str(instance) + " " + str(data[i])
+                sInst += str(instance) + " " + str(data[i].strip()) + "\n"
 
             if write_output:
                 fOut.write(s)   
