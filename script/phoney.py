@@ -286,6 +286,26 @@ class Graph():
                 if progression != "":
                     logger.info(progression)
 
+    def instancesCoordinates(self, filename, hrows, frows):
+
+        logger.info("Reading instance coordinates file: {}".format(filename))
+        try:
+            with open(filename, 'r') as f:
+                lines = f.read().splitlines()
+        except IOError:
+            with open(os.sep.join([os.sep.join(filename.split(os.sep)[:-2]), filename.split(os.sep)[-1]]), 'r') as f:
+                lines = f.read().splitlines()
+
+        coordinates = {} # {instance name : [x, y]}
+        for l in lines:
+            coordinates[l.split(',')[1]] = [float(l.split(',')[2]), float(l.split(',')[3])]
+
+        for cluster in self.clusters.values():
+            for instance in cluster.instances.values():
+                instance.x = coordinates[instance.name][0]
+                instance.y = coordinates[instance.name][1]
+
+
 
 
     def readMemoryBlocks(self, filename, hrows, frows):
@@ -728,6 +748,19 @@ class Graph():
                     #     pins.append(n.pins)
                     #     wl += n.wl
                     # weight = statistics.mean(pins) / wl
+                    #
+                    ###
+
+                    ###
+                    # Another experimental
+                    
+                    # if SIMPLE_GRAPH:
+                    #     manDist = [] # Manhattan distance of 'nets' in the simple graph edge
+                    #     for cluster in hyperedge.clusters:
+                    #         instances = list(cluster.instances.values())
+                    #         manDist.append(abs(instances[0].x - instances[1].x) + abs(instances[0].y - instances[1].y))
+                    #     weight = 1.0/statistics.mean(manDist)
+
                     #
                     ###
                 elif weightType == 1:
@@ -1758,6 +1791,7 @@ if __name__ == "__main__":
             else:
                 logger.warning("Cluster type not supported.")
 
+            instancesCoordFile = os.path.join(mydir, "CellCoord.out")
             netsInstances = os.path.join(mydir, "InstancesPerNet.out")
             netsWL = os.path.join(mydir, "WLnets.out")
             memoryBlocksFile = os.path.join(mydir, "bb.out")
@@ -1776,6 +1810,7 @@ if __name__ == "__main__":
             graph.readClustersInstances(clustersInstancesFile, 0, 0)
             t1 = time.time()
             logger.debug("time: %s", str(t1-t0))
+            graph.instancesCoordinates(instancesCoordFile,0,0)
             if MEMORY_BLOCKS:
                 t0 = time.time()
                 graph.readMemoryBlocks(memoryBlocksFile, 14, 4)
