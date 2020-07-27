@@ -7,7 +7,7 @@ Note: - It is very important at the moment that the clusters have the same ID as
         look the parent folder if they can't be found.
 
 Usage:
-    phoney.py   [-d <dir>] [-w <weight>] [--seed=seed] [--algo=algo] [--path=path]
+    phoney.py   [-d <dir>] [-w <weight>] [--seed=seed] [--algo=algo] [--path=path] [--fix-pins]
                 [--simple-graph]
     phoney.py --help
 
@@ -22,6 +22,8 @@ Options:
                     4: Random partitioner
     --path=path     Full path to the partitioning tool
     --simple-graph  If set, translate the hypergraph into a simple graph
+    --fix-pins      If set, force all standard cells connected to a pin to be placed
+                    on the bottom die.
     -h --help       Print this help
 """
 
@@ -49,6 +51,8 @@ HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
 PATOH_PATH = "/home/para/Downloads/patoh/build/Linux-x86_64/"
 CIRCUT_PATH = "/home/para/dev/circut10612/circut_v1.0612/tests/"
+PIN_CELLS_F = "pinCells.out"
+PIN_COORD_F = "pinCoord.out"
 ALGO = 0 # 0: METIS
          # 1: PaToH
          # 2: Circut
@@ -88,6 +92,7 @@ POWER_DENSITIES = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.0
 # In that case, we assume there are no two identicals nets
 # and there is no need to merge the corresponding hyperedges
 ONE_TO_ONE = True
+FIX_PINS = False
 
 def printProgression(current, max):
     progression = ""
@@ -620,7 +625,21 @@ class Graph():
 
 
 
-    def generateMetisInput(self, filename, edgeWeightType, vertexWeightType):
+    def generateMetisInput(self, filename, edgeWeightType, vertexWeightType, fixPins, metisInputFixfile, pinCellsFile):
+        """
+        
+        Parameters
+        ----------
+        fixPins : boolean
+            If true, tell Metis to force the cells in PIN_CELLS_F to stay on the layer 0.
+            Extract from the documentation:
+            The FixFile is used to specify the vertices that are pre-assigned to certain partitions. In general, when computing a
+            k-way partitioning, up to k sets of vertices can be specified, such that each set is pre-assigned to one of the k partitions.
+            For a hypergraph with |V| vertices, the FixFile consists of |V| lines with a single number per line. The ith line of the
+            file contains either the partition number to which the ith vertex is pre-assigned to, or -1 if that vertex can be assigned
+            to any partition (i.e., free to move). Note that the partition numbers start from 0.
+
+        """
         logger.info("Generating METIS input file...")
         s = ""
         if SIMPLE_GRAPH:
@@ -653,6 +672,29 @@ class Graph():
                 s += "\n" + str(cluster.weightsNormalized[vertexWeightType])
         with open(filename, 'w') as file:
             file.write(s)
+
+        if fixPins:
+            try:
+                with open(pinCellsFile, 'r') as f:
+                    cellPins = f.read().splitlines()
+            except IOError:
+                with open(os.sep.join([os.sep.join(pinCellsFile.split(os.sep)[:-2]), pinCellsFile.split(os.sep)[-1]]), 'r') as f:
+                    cellPins = f.read().splitlines()
+
+            s = ""
+            # For each vertex, check in PIN_CELLS_F if a cell in the cluster is connected to a pin.
+            # If it is, set its line to 0.
+            # Set the line to -1 otherwise.
+            for cluster in self.clusters.values():
+                gotPin = -1 # Does the cluster contain a cell connected to a pin?
+                for cell in cluster.instances.keys():
+                    if cell in cellPins:
+                        gotPin = 0
+                        break
+                s += "{}\n".format(gotPin)
+            with open(metisInputFixfile, 'w') as f:
+                f.write(s)
+
 
 
     def generatePaToHInput(self, filename, edgeWeightType, vertexWeightType):
@@ -742,12 +784,12 @@ class Graph():
                     ###
                     # Experimental
                     #
-                    # pins = list()
-                    # wl = 0
-                    # for n in hyperedge.nets:
-                    #     pins.append(n.pins)
-                    #     wl += n.wl
-                    # weight = statistics.mean(pins) / wl
+                    pins = list()
+                    wl = 0
+                    for n in hyperedge.nets:
+                        pins.append(n.pins)
+                        wl += n.wl
+                    weight = statistics.mean(pins) / wl
                     #
                     ###
 
@@ -760,6 +802,14 @@ class Graph():
                     #         instances = list(cluster.instances.values())
                     #         manDist.append(abs(instances[0].x - instances[1].x) + abs(instances[0].y - instances[1].y))
                     #     weight = 1.0/statistics.mean(manDist)
+
+                    #
+                    ###
+
+                    ###
+                    # Yet another experimental
+                    
+                    # weight = random.uniform(1,100)
 
                     #
                     ###
@@ -899,7 +949,7 @@ class Graph():
 
 
 
-    def GraphPartition(self, filename):
+    def GraphPartition(self, filename, FIX_PINS, fixfilepath):
         '''
         Call the hmetis command with the given filename, or gpmetis if we are working
         with simple graphs.
@@ -919,10 +969,14 @@ class Graph():
         Reconst = 0
         dbglvl = 8
         command = ""
+        fixfile = ""
+        if FIX_PINS:
+            fixfile = " {}".format(fixfilepath)
+            logger.info("FIX_PINS is True, adding a fixfile located at {}".format(fixfile))
         if SIMPLE_GRAPH:
             command = METIS_PATH + "gpmetis " + filename + " 2 -dbglvl=0 -ufactor=30"
         else:
-            command = HMETIS_PATH + "hmetis " + filename + " " + str(Nparts) + \
+            command = HMETIS_PATH + "hmetis " + filename + fixfile + " " + str(Nparts) + \
                 " " + str(UBfactor) + " " + str(Nruns) + " " + str(Ctype) + " " + \
                 str(Rtype) + " " + str(Vcycle) + " " + str(Reconst) + " " + str(dbglvl)
             logger.info("Calling '%s'", command)
@@ -1734,6 +1788,8 @@ if __name__ == "__main__":
             CIRCUT_PATH = args["--path"]
     if args["--simple-graph"]:
         SIMPLE_GRAPH = True
+    if args["--fix-pins"]:
+        FIX_PINS = True
 
 
     # Random seed is preset or random, depends on weither you want the same results or not.
@@ -1792,6 +1848,7 @@ if __name__ == "__main__":
                 logger.warning("Cluster type not supported.")
 
             instancesCoordFile = os.path.join(mydir, "CellCoord.out")
+            pinCellsFile = os.path.join(mydir, PIN_CELLS_F)
             netsInstances = os.path.join(mydir, "InstancesPerNet.out")
             netsWL = os.path.join(mydir, "WLnets.out")
             memoryBlocksFile = os.path.join(mydir, "bb.out")
@@ -1846,6 +1903,7 @@ if __name__ == "__main__":
                 if ALGO == 0: # METIS
                     metisInput = os.path.join(output_dir, "metis_" + edgeWeightTypesStr[edgeWeightType] + \
                         "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr")
+                    metisInputFixfile = os.path.join(output_dir, "metis_{}_{}_fixfile.hgr".format(edgeWeightTypesStr[edgeWeightType], vertexWeightTypesStr[vertexWeightType]))
                     metisPartitionFile = metisInput + ".part.2"
                     partitionDirectivesFile = metisInput + ".tcl"
                     gatePerDieFile = metisInput + ".part"
@@ -1855,8 +1913,8 @@ if __name__ == "__main__":
                     logger.info("> Vertex weight: " + vertexWeightTypesStr[vertexWeightType])
                     logger.info("=============================================================")
 
-                    graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType)
-                    graph.GraphPartition(metisInput)
+                    graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType, FIX_PINS, metisInputFixfile, pinCellsFile)
+                    graph.GraphPartition(metisInput, FIX_PINS, metisInputFixfile)
                     graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile, gatePerDieFile)
                     graph.extractPartitionConnectivity(os.path.join(output_dir, "connectivity_partition.txt"), edgeWeightTypesStr[edgeWeightType])
                     graph.extractPartitionNetLengthCut(os.path.join(output_dir, "cutLength_partition.txt"), edgeWeightTypesStr[edgeWeightType])
