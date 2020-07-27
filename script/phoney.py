@@ -477,6 +477,38 @@ class Graph():
                 logger.info(progression)
 
 
+    def readPins(self, filename):
+        """
+        Pins are expected to share the same name with the connected net.
+
+        For each pin, create a dummy cluster, tagged as a pin and with a null area.
+
+        parameters:
+        -----------
+        filename : String
+            Path to a file formated as follows:
+            <Pin name> <x [float]> <y [float]>
+        """
+        logger.info("Reading  pins file: {}".format(filename))
+        try:
+            with open(filename, 'r') as f:
+                lines = f.read().splitlines()
+        except IOError:
+            with open(os.sep.join([os.sep.join(filename.split(os.sep)[:-2]), filename.split(os.sep)[-1]]), 'r') as f:
+                lines = f.read().splitlines()
+
+        for line in lines:
+            cluster = Cluster(line.split(' ')[0], len(self.clusters), False)
+            cluster.isPin = True
+            cluster.setArea(0)
+            cluster.setPower(0)
+            self.clusters[cluster.name] = cluster
+            for net in self.nets:
+                if net.name == cluster.name:
+                    net.clusters.add(cluster)
+
+
+
 
 ##     ##  ##    ##   ########   #########  ########   #########  ######      #######   #########  
 ##     ##   ##  ##    ##     ##  ##         ##     ##  ##         ##    ##   ##         ##         
@@ -710,6 +742,15 @@ class Graph():
                         gotPin = 0
                         break
                 s += "{}\n".format(gotPin)
+            with open(metisInputFixfile, 'w') as f:
+                f.write(s)
+        else:
+            s = ""
+            for cluster in self.clusters.values():
+                if cluster.isPin or cluster.assignedBottom:
+                    s += "0\n"
+                else:
+                    s += "-1\n"
             with open(metisInputFixfile, 'w') as f:
                 f.write(s)
 
@@ -1002,10 +1043,8 @@ class Graph():
         Reconst = 0
         dbglvl = 8
         command = ""
-        fixfile = ""
-        if FIX_PINS:
-            fixfile = " {}".format(fixfilepath)
-            logger.info("FIX_PINS is True, adding a fixfile located at {}".format(fixfile))
+        fixfile = " {}".format(fixfilepath)
+        # logger.info("FIX_PINS is True, adding a fixfile located at {}".format(fixfile))
         if SIMPLE_GRAPH:
             command = METIS_PATH + "gpmetis " + filename + " 2 -dbglvl=0 -ufactor=30"
         else:
@@ -1661,7 +1700,8 @@ class Cluster:
         self.isDummy = False
         self.partition = 0 # Partition to which the cluster belongs.
         self.distOr = 0 # Distance from the origin if all rows were aligned next to each other.
-
+        self.isPin = False # Is nothing more than a pin.
+        self.assignedBottom = False # If True, should be fixed on the bottom die.
 
     def setBoundaries(self, lowerX, lowerY, upperX, upperY):
         self.boundaries[0][0] = lowerX
@@ -1922,6 +1962,7 @@ if __name__ == "__main__":
             instancesCoordFile = os.path.join(mydir, "CellCoord.out")
             pinCellsFile = os.path.join(mydir, PIN_CELLS_F)
             netsInstances = os.path.join(mydir, "InstancesPerNet.out")
+            pinCoordFile = os.path.join(mydir, PIN_COORD_F)
             netsWL = os.path.join(mydir, "WLnets.out")
             memoryBlocksFile = os.path.join(mydir, "bb.out")
             # memoryBlocksFile = mydir + "1.bb.rpt"
@@ -1948,6 +1989,7 @@ if __name__ == "__main__":
             # Begin with the netWL file, as there are less nets there.
             graph.readNetsWireLength(netsWL, 1, 0)
             graph.readNets(netsInstances, 0, 0)
+            graph.readPins(pinCoordFile)
 
             t0 = time.time()
             graph.findHyperedges(output_dir)
