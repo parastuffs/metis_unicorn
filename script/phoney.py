@@ -8,23 +8,24 @@ Note: - It is very important at the moment that the clusters have the same ID as
 
 Usage:
     phoney.py   [-d <dir>] [-w <weight>] [--seed=seed] [--algo=algo] [--path=path] [--fix-pins]
-                [--simple-graph]
+                [--simple-graph] [--custom-fixfile]
     phoney.py --help
 
 Options:
-    -d <dir>        Design directory containing the cluster information (.out files and such)
-    -w <weight>     Amount of edge weights to consider, [1, 10]
-    --seed=seed     RNG seed
-    --algo=algo     0: hMETIS [default: 0]
-                    1: PaToH
-                    2: Circut
-                    3: Custom partitioner
-                    4: Random partitioner
-    --path=path     Full path to the partitioning tool
-    --simple-graph  If set, translate the hypergraph into a simple graph
-    --fix-pins      If set, force all standard cells connected to a pin to be placed
-                    on the bottom die.
-    -h --help       Print this help
+    -d <dir>            Design directory containing the cluster information (.out files and such)
+    -w <weight>         Amount of edge weights to consider, [1, 10]
+    --seed=seed         RNG seed
+    --algo=algo         0: hMETIS [default: 0]
+                        1: PaToH
+                        2: Circut
+                        3: Custom partitioner
+                        4: Random partitioner
+    --path=path         Full path to the partitioning tool
+    --simple-graph      If set, translate the hypergraph into a simple graph
+    --fix-pins          If set, force all standard cells connected to a pin to be placed
+                        on the bottom die.
+    --custom-fixfile    Use existing fixfile for hmetis, located in <dir> and named 'fixfile.hgr'
+    -h --help           Print this help
 """
 
 import math
@@ -61,7 +62,7 @@ EDGE_WEIGHTS_TYPES = 10
 # EDGE_WEIGHTS_TYPES = 1
 VERTEX_WEIGHTS_TYPES = 1
 WEIGHT_COMBILI_COEF = 0.5
-MAX_WEIGHT = 1000
+MAX_WEIGHT = 100000
 THREADS = 1     # Amount of parallel process to use when building the hypergraph.
 CLUSTER_INPUT_TYPE = 0  # 0: standard .out lists
                         # 1: Ken's output
@@ -675,7 +676,7 @@ class Graph():
 
 
 
-    def generateMetisInput(self, filename, edgeWeightType, vertexWeightType, fixPins, metisInputFixfile, pinCellsFile):
+    def generateMetisInput(self, filename, edgeWeightType, vertexWeightType, fixPins, metisInputFixfile, pinCellsFile, CUSTOM_FIXFILE=False):
         """
         
         Parameters
@@ -689,6 +690,8 @@ class Graph():
             file contains either the partition number to which the ith vertex is pre-assigned to, or -1 if that vertex can be assigned
             to any partition (i.e., free to move). Note that the partition numbers start from 0.
 
+        CUSTOM_FIXFILE : boolean
+            If true, don't regenarate the fixfile.
         """
         logger.info("Generating METIS input file...")
         s = ""
@@ -723,36 +726,37 @@ class Graph():
         with open(filename, 'w') as file:
             file.write(s)
 
-        if fixPins:
-            try:
-                with open(pinCellsFile, 'r') as f:
-                    cellPins = f.read().splitlines()
-            except IOError:
-                with open(os.sep.join([os.sep.join(pinCellsFile.split(os.sep)[:-2]), pinCellsFile.split(os.sep)[-1]]), 'r') as f:
-                    cellPins = f.read().splitlines()
+        if not CUSTOM_FIXFILE:
+            if fixPins:
+                try:
+                    with open(pinCellsFile, 'r') as f:
+                        cellPins = f.read().splitlines()
+                except IOError:
+                    with open(os.sep.join([os.sep.join(pinCellsFile.split(os.sep)[:-2]), pinCellsFile.split(os.sep)[-1]]), 'r') as f:
+                        cellPins = f.read().splitlines()
 
-            s = ""
-            # For each vertex, check in PIN_CELLS_F if a cell in the cluster is connected to a pin.
-            # If it is, set its line to 0.
-            # Set the line to -1 otherwise.
-            for cluster in self.clusters.values():
-                gotPin = -1 # Does the cluster contain a cell connected to a pin?
-                for cell in cluster.instances.keys():
-                    if cell in cellPins:
-                        gotPin = 0
-                        break
-                s += "{}\n".format(gotPin)
-            with open(metisInputFixfile, 'w') as f:
-                f.write(s)
-        else:
-            s = ""
-            for cluster in self.clusters.values():
-                if cluster.isPin or cluster.assignedBottom:
-                    s += "0\n"
-                else:
-                    s += "-1\n"
-            with open(metisInputFixfile, 'w') as f:
-                f.write(s)
+                s = ""
+                # For each vertex, check in PIN_CELLS_F if a cell in the cluster is connected to a pin.
+                # If it is, set its line to 0.
+                # Set the line to -1 otherwise.
+                for cluster in self.clusters.values():
+                    gotPin = -1 # Does the cluster contain a cell connected to a pin?
+                    for cell in cluster.instances.keys():
+                        if cell in cellPins:
+                            gotPin = 0
+                            break
+                    s += "{}\n".format(gotPin)
+                with open(metisInputFixfile, 'w') as f:
+                    f.write(s)
+            else:
+                s = ""
+                for cluster in self.clusters.values():
+                    if cluster.isPin or cluster.assignedBottom:
+                        s += "0\n"
+                    else:
+                        s += "-1\n"
+                with open(metisInputFixfile, 'w') as f:
+                    f.write(s)
 
 
 
@@ -847,17 +851,17 @@ class Graph():
                     # Number of wires
                     weight = hyperedge.connectivity
 
-                    ###
-                    # Experimental
-                    #
-                    pins = list()
-                    wl = 0
-                    for n in hyperedge.nets:
-                        pins.append(n.pins)
-                        wl += n.wl
-                    weight = statistics.mean(pins) / wl
-                    #
-                    ###
+                    # ###
+                    # # Experimental
+                    # #
+                    # pins = list()
+                    # wl = 0
+                    # for n in hyperedge.nets:
+                    #     pins.append(n.pins)
+                    #     wl += n.wl
+                    # weight = statistics.mean(pins) / wl
+                    # #
+                    # ###
 
                     ###
                     # Another experimental
@@ -912,6 +916,12 @@ class Graph():
                 elif weightType == 9:
                     # 1 / total wire length and number of wires
                     weight = 1 / hyperedge.weights[8]
+                elif weightType == 10:
+                    # fanout
+                    pins = 0
+                    for n in hyperedge.nets:
+                        pins += n.pins
+                    weight = pins
 
 
                 hyperedge.setWeight(weightType, weight)
@@ -1039,11 +1049,12 @@ class Graph():
         Nruns = 20
         Ctype = 1
         Rtype = 1
-        Vcycle = 1
+        Vcycle = 3
         Reconst = 0
         dbglvl = 8
         command = ""
         fixfile = " {}".format(fixfilepath)
+        # fixfile = " /home/para/dev/def_parser/2020-07-30_10-57-03_spc-2020_OneToOne/spc_Memory-on-logic_pur/metis_01_NoWires_area_fixfile.hgr"
         # logger.info("FIX_PINS is True, adding a fixfile located at {}".format(fixfile))
         if SIMPLE_GRAPH:
             command = METIS_PATH + "gpmetis " + filename + " 2 -dbglvl=0 -ufactor=30"
@@ -1239,7 +1250,7 @@ class Graph():
                 fOutGates.write(sInst)
             else:
                 partFileStr += s + "\n"
-                gpdStr += sInst + "\n"
+                gpdStr += sInst
         if write_output:
             fOut.close()
             fIn.close()
@@ -1461,6 +1472,8 @@ class Graph():
         else:
             lines = partStr.split('\n')
 
+        # reset partitions
+        self.partitions = list()
         for i in range(0, 2):
             self.partitions.append(list())
 
@@ -1853,6 +1866,8 @@ def initWeightsStr(edgeWeightTypesStr, vertexWeightTypesStr):
             edgeWeightTypesStr.append("09_NoWires+TotLength")
         if edgeWeightType == 9:
             edgeWeightTypesStr.append("10_1-NoWires+TotLength")
+        if edgeWeightType == 10:
+            edgeWeightTypesStr.append("11_fanout")
 
     if SIMPLE_GRAPH and VERTEX_WEIGHTS_TYPES == 2:
         vertexWeightTypesStr.append("area-power")
@@ -1874,6 +1889,7 @@ def writeOutput(directory, strToWrite):
 if __name__ == "__main__":
     dirs = []
     EDGE_WEIGHTS_TYPES = 0
+    CUSTOM_FIXFILE = False
     args = docopt(__doc__)
     print(args)
     if args["-d"]:
@@ -1902,6 +1918,8 @@ if __name__ == "__main__":
         SIMPLE_GRAPH = True
     if args["--fix-pins"]:
         FIX_PINS = True
+    if args["--custom-fixfile"]:
+        CUSTOM_FIXFILE = True
 
 
     # Random seed is preset or random, depends on weither you want the same results or not.
@@ -2017,7 +2035,11 @@ if __name__ == "__main__":
                 if ALGO == 0: # METIS
                     metisInput = os.path.join(output_dir, "metis_" + edgeWeightTypesStr[edgeWeightType] + \
                         "_" + vertexWeightTypesStr[vertexWeightType] + ".hgr")
-                    metisInputFixfile = os.path.join(output_dir, "metis_{}_{}_fixfile.hgr".format(edgeWeightTypesStr[edgeWeightType], vertexWeightTypesStr[vertexWeightType]))
+                    if CUSTOM_FIXFILE:
+                        metisInputFixfile = os.path.join(output_dir, "fixfile.hgr")
+                        shutil.copyfile(os.path.join(mydir, "fixfile.hgr"), metisInputFixfile)
+                    else:
+                        metisInputFixfile = os.path.join(output_dir, "metis_{}_{}_fixfile.hgr".format(edgeWeightTypesStr[edgeWeightType], vertexWeightTypesStr[vertexWeightType]))
                     metisPartitionFile = metisInput + ".part.2"
                     partitionDirectivesFile = metisInput + ".tcl"
                     gatePerDieFile = metisInput + ".part"
@@ -2027,7 +2049,7 @@ if __name__ == "__main__":
                     logger.info("> Vertex weight: " + vertexWeightTypesStr[vertexWeightType])
                     logger.info("=============================================================")
 
-                    graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType, FIX_PINS, metisInputFixfile, pinCellsFile)
+                    graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType, FIX_PINS, metisInputFixfile, pinCellsFile, CUSTOM_FIXFILE)
                     graph.GraphPartition(metisInput, FIX_PINS, metisInputFixfile)
                     graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile, gatePerDieFile)
                     graph.extractPartitionConnectivity(os.path.join(output_dir, "connectivity_partition.txt"), edgeWeightTypesStr[edgeWeightType])
@@ -2138,15 +2160,18 @@ if __name__ == "__main__":
 
                     conMin = -1
                     conMax = 0
-                    maxIt = 200
+                    maxIt = 100
+                    cnt = 0 # iteration counter
                     i = maxIt
 
                     fileList = ["connectivity_partition.txt", "cutLength_partition.txt", ranPartPartitionFile.split(os.sep)[-1], partitionDirectivesFile.split(os.sep)[-1], gatePerDieFile.split(os.sep)[-1]]
                     strList = [conPartFileStr, cutLenPartFileStr, ranPartPartitionFileStr, partitionDirectivesFileStr, gatePerDieFileStr] # Needs to be in the same order as fileList.
                     while i > 0:
+                        cnt += 1
                         logger.debug("~~~~~~~~~~~~~~~~~~~~~~")
                         logger.debug("~ Random part #{} ~".format(i))
                         logger.debug("~~~~~~~~~~~~~~~~~~~~~~")
+                        newCons = list()
                         # Reset strings
                         for j in range(len(strList)):
                             strList[j] = ""
@@ -2154,6 +2179,7 @@ if __name__ == "__main__":
                         strList[2] = graph.GraphPartitionRanPart(ranPartPartitionFile, write_output=False)
                         strList[3], strList[4] = graph.WritePartitionDirectives(ranPartPartitionFile, partitionDirectivesFile, gatePerDieFile, write_output=False, partStr=strList[2])
                         newCon, strList[0] = graph.extractPartitionConnectivity(conPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False)
+                        newCons.append(newCon)
                         graph.extractPartitions(partitionDirectivesFile, readFile=False, partStr=strList[3])
                         if newCon < conMin or conMin == -1:
                             conMin = newCon
@@ -2164,19 +2190,24 @@ if __name__ == "__main__":
                             for j in range(len(fileList)):
                                 writeOutput(os.path.join(minDir, fileList[j]), strList[j])
                             i = maxIt
-                        if newCon > conMax:
-                            conMax = newCon
-                            strList[1] = graph.extractPartitionNetLengthCut(cutLenPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False)
-                            graph.computePartitionArea()
-                            graph.computePartitionPower()
-                            # Writes all outputs to 'max'
-                            for j in range(len(fileList)):
-                                writeOutput(os.path.join(maxDir, fileList[j]), strList[j])
-                            i = maxIt
+                        # if newCon > conMax:
+                        #     conMax = newCon
+                        #     strList[1] = graph.extractPartitionNetLengthCut(cutLenPartFile, edgeWeightTypesStr[edgeWeightType], write_output=False)
+                        #     graph.computePartitionArea()
+                        #     graph.computePartitionPower()
+                        #     # Writes all outputs to 'max'
+                        #     for j in range(len(fileList)):
+                        #         writeOutput(os.path.join(maxDir, fileList[j]), strList[j])
+                        #     # i = maxIt
                         i -= 1
-                    logger.info("Final mincut: {}, final maxcut: {}".format(conMin, conMax))
+                    logger.info("Final mincut: {}, final maxcut: {}, average: {}, iterations: {}".format(conMin, conMax, statistics.mean(newCons), cnt))
+                    # with open(os.path.join(output_dir, "connectivities.out"), 'w') as f:
+                    #     strCon = ""
+                    #     for newCon in newCons:
+                    #         strCon += "{}\n".format(newCon)
+                    #     f.write(strCon)
 
 
 
-        graph.hammingReport(partitionFiles)
+        # graph.hammingReport(partitionFiles)
         # graph.plotWeights()
