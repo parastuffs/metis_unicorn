@@ -32,7 +32,7 @@ import math
 from subprocess import call
 import subprocess
 import copy
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import threading
 from multiprocessing import Process, Pipe
 import time
@@ -1168,17 +1168,17 @@ class Graph():
             logger.info("Write tcl file for file: %s", metisFileIn)
             try:
                 fOut = open(metisFileOut, "w")
-            except IOError as e:
+            except IOError:
                 logger.error("Can't open file {}".format(metisFileOut))
                 return False
             try:
                 fIn = open(metisFileIn, "r")
-            except IOError as e:
+            except IOError:
                 logger.error("Can't open file {}".format(metisFileIn))
                 return False
             try:
                 fOutGates = open(gatePerDieFile, 'w')
-            except IOError as e:
+            except IOError:
                 logger.error("Can't open file {}".format(gatePerDieFile))
                 return False
 
@@ -1428,11 +1428,14 @@ class Graph():
         self.partitionsArea = [0] * 2
 
         for i, partition in enumerate(self.partitions):
+            # logger.debug("partition#: {}".format(i))
             for cluster in partition:
                 self.partitionsArea[i] += cluster.area
+                # logger.debug("cluster name: {}".format(cluster.name))
 
         totalArea = 0
         for part in self.partitionsArea:
+            logger.debug("partition area: {}".format(part))
             totalArea += part
 
         areaFraction = [0] * 2
