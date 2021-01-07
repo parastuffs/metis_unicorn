@@ -8,7 +8,7 @@ Note: - It is very important at the moment that the clusters have the same ID as
 
 Usage:
     phoney.py   [-d <dir>] [-w <weight>] [--seed=seed] [--algo=algo] [--path=path] [--fix-pins]
-                [--simple-graph] [--custom-fixfile]
+                [--simple-graph] [--custom-fixfile] [--netsegments]
     phoney.py --help
 
 Options:
@@ -25,6 +25,7 @@ Options:
     --fix-pins          If set, force all standard cells connected to a pin to be placed
                         on the bottom die.
     --custom-fixfile    Use existing fixfile for hmetis, located in <dir> and named 'fixfile.hgr'
+    --netsegments       Use alternative net segments for the graph generation. Needs a file named 'WLnets_segments.out'.
     -h --help           Print this help
 """
 
@@ -46,9 +47,12 @@ import logging, logging.config
 import shutil
 from docopt import docopt
 import statistics
+from alive_progress import alive_bar
 
 global HMETIS_PATH
 HMETIS_PATH = "/home/para/dev/metis_unicorn/hmetis-1.5-linux/"
+HMETIS_PATH_BETA = "/home/para/dev/metis_unicorn/hmetis-2.0pre1/Linux-x86_64/hmetis2.0pre1"
+HMETIS_BETA = True
 METIS_PATH = "/home/para/dev/metis_unicorn/metis/bin/"
 PATOH_PATH = "/home/para/Downloads/patoh/build/Linux-x86_64/"
 CIRCUT_PATH = "/home/para/dev/circut10612/circut_v1.0612/tests/"
@@ -394,7 +398,7 @@ class Graph():
                 logger.info(progression)
 
 
-    def readNetsWireLength(self, filename, hrows, frows):
+    def readNetsWireLength(self, filename, hrows, frows, segments):
         logger.info("Reading wire length nets file: %s", filename)
         try:
             with open(filename, 'r') as f:
@@ -410,25 +414,39 @@ class Graph():
         for i in range(0,frows):
             del lines[-1]
 
+        # if segments:
+        #     lines.sort()
+        #     for i, line in enumerate(lines):
+        #         net = Net(line.split()[0], i)
+        #         net.setPinAmount(int(line.split()[1]))
+        #         net.setWL(float(line.split()[2]))
+        #         self.nets.append(net)
+        #         progression = printProgression(i, len(lines))
+        #         if progression != "":
+        #             logger.info(progression)
+
+        # else:
         for i in range(0, len(lines)):
             lines[i] = " ".join(lines[i].split())
         lines.sort()
 
-        for i, line in enumerate(lines):
-            netDataRow = line.split()
+        with alive_bar(len(lines)) as bar:
+            for i, line in enumerate(lines):
+                netDataRow = line.split()
 
-            net = Net(netDataRow[0], i)
-            net.setPinAmount(int(netDataRow[1]))
-            net.setWL(float(netDataRow[2]))
-            # net.setWL(int(float(netDataRow[2])) + 1)    # + 1 here to make sure
-                                                        #we don't use a net with WL = 0
-            self.nets.append(net)
-            progression = printProgression(i, len(lines))
-            if progression != "":
-                logger.info(progression)
+                net = Net(netDataRow[0], i)
+                net.setPinAmount(int(netDataRow[1]))
+                net.setWL(float(netDataRow[2]))
+                # net.setWL(int(float(netDataRow[2])) + 1)    # + 1 here to make sure
+                                                            #we don't use a net with WL = 0
+                self.nets.append(net)
+                # progression = printProgression(i, len(lines))
+                # if progression != "":
+                #     logger.info(progression)
+                bar()
 
 
-    def readNets(self, filename, hrows, frows):
+    def readNets(self, filename, hrows, frows, segments):
         logger.info("Reading nets file: %s", filename)
         try:
             with open(filename, 'r') as f:
@@ -446,36 +464,70 @@ class Graph():
 
         lines.sort()
 
-        # As the nets list is sorted, we should not run through all the
-        # self.nets list for each line.
-        # For each line, move forward in self.nets. If the net in the line
-        # is found, great! If not, no biggie, just keep moving forward.
-        netID = 0
-        i = 0
-        while i < len(lines) and netID < len(self.nets):
-            line = lines[i]
-            line = line.strip(' \n')
-            line = line.replace('{','')
-            line = line.replace('}','')
-            netDataRow = line.split()
-            if self.nets[netID].name == netDataRow[0]:
-                del netDataRow[0]
-                for instanceName in netDataRow:
-                    # TODO add a verification that the instance is indeed in the class instances dictionary.
-                    instance = self.instances.get(instanceName)
-                    if instance is None:
-                        logger.info("%s is not recognized as an instance.", str(instanceName))
-                    instance.addNet(self.nets[netID])
-                    self.nets[netID].addInstance(instance)
-                    self.nets[netID].addCluster(instance.cluster)
-                    # TODO add cluster reference to net from the instance
-                    # self.nets[netID].addInstance(instanceName)
-                netID += 1
-            i += 1
+        if segments:
+            netID = 0
+            i = 0
+            with alive_bar(len(lines)) as bar:
+                while i < len(lines) and netID < len(self.nets):
+                    line = lines[i]
+                    line = line.replace('{','')
+                    line = line.replace('}','')
+                    netDataRow = line.split()
+                    if self.nets[netID].name == netDataRow[0]:
+                        for instanceName in netDataRow[0].split('/')[1:]:
+                            # This ought to be a pin. Continue, skip the rest of the loop.
+                            # TODO but we should make sure it's a pin indeed.
+                            if instanceName not in self.instances.keys():
+                                # logger.error("'{}' is not a valid instance.\nNet line: '{}'".format(instanceName, line))
+                                continue
+                            instance = self.instances.get(instanceName)
+                            if instance is None:
+                                logger.info("%s is not recognized as an instance.", str(instanceName))
+                            instance.addNet(self.nets[netID])
+                            self.nets[netID].addInstance(instance)
+                            self.nets[netID].addCluster(instance.cluster)
+                            # TODO add cluster reference to net from the instance
+                            # self.nets[netID].addInstance(instanceName)
+                        netID += 1
+                    i += 1
 
-            progression = printProgression(i, len(lines))
-            if progression != "":
-                logger.info(progression)
+                    # progression = printProgression(i, len(lines))
+                    # if progression != "":
+                    #     logger.info(progression)
+                    bar()
+        else:
+            # As the nets list is sorted, we should not run through all the
+            # self.nets list for each line.
+            # For each line, move forward in self.nets. If the net in the line
+            # is found, great! If not, no biggie, just keep moving forward.
+            netID = 0
+            i = 0
+            with alive_bar(len(lines)) as bar:
+                while i < len(lines) and netID < len(self.nets):
+                    line = lines[i]
+                    line = line.strip(' \n')
+                    line = line.replace('{','')
+                    line = line.replace('}','')
+                    netDataRow = line.split()
+                    if self.nets[netID].name == netDataRow[0]:
+                        del netDataRow[0]
+                        for instanceName in netDataRow:
+                            # TODO add a verification that the instance is indeed in the class instances dictionary.
+                            instance = self.instances.get(instanceName)
+                            if instance is None:
+                                logger.info("%s is not recognized as an instance.", str(instanceName))
+                            instance.addNet(self.nets[netID])
+                            self.nets[netID].addInstance(instance)
+                            self.nets[netID].addCluster(instance.cluster)
+                            # TODO add cluster reference to net from the instance
+                            # self.nets[netID].addInstance(instanceName)
+                        netID += 1
+                    i += 1
+
+                    # progression = printProgression(i, len(lines))
+                    # if progression != "":
+                    #     logger.info(progression)
+                    bar()
 
 
     def readPins(self, filename):
@@ -1046,10 +1098,12 @@ class Graph():
         # hmetis graphFile Nparts UBfactor Nruns Ctype Rtype Vcycle Reconst dbglvl
         Nparts = 2
         UBfactor = 1
-        Nruns = 20
+        # Nruns = 20
+        Nruns = 10 # default for shmetis
         Ctype = 1
         Rtype = 1
-        Vcycle = 3
+        # Vcycle = 3 # Refinement at each step.
+        Vcycle = 1 # Refinement only of the final bisection step.
         Reconst = 0
         dbglvl = 8
         command = ""
@@ -1059,10 +1113,15 @@ class Graph():
         if SIMPLE_GRAPH:
             command = METIS_PATH + "gpmetis " + filename + " 2 -dbglvl=0 -ufactor=30"
         else:
-            command = HMETIS_PATH + "hmetis " + filename + fixfile + " " + str(Nparts) + \
-                " " + str(UBfactor) + " " + str(Nruns) + " " + str(Ctype) + " " + \
-                str(Rtype) + " " + str(Vcycle) + " " + str(Reconst) + " " + str(dbglvl)
-            logger.info("Calling '%s'", command)
+            if not HMETIS_BETA:
+                command = HMETIS_PATH + "hmetis " + filename + fixfile + " " + str(Nparts) + \
+                    " " + str(UBfactor) + " " + str(Nruns) + " " + str(Ctype) + " " + \
+                    str(Rtype) + " " + str(Vcycle) + " " + str(Reconst) + " " + str(dbglvl)
+                logger.info("Calling '%s'", command)
+            else:
+                logger.info("!!! BETA version of hMetis! !!!")
+                command = "{} {} {} -ctype={} -rtype={} -ufactor={} -nruns={} -fixed={} -dbglvl={} -nvcycles={}".format(HMETIS_PATH_BETA, filename, Nparts, "fc1", "slow", UBfactor, Nruns, fixfilepath, dbglvl, Vcycle)
+                logger.info("Calling {}".format(command))
         # call([HMETIS_PATH + "hmetis",filename,"2","5","20","1","1","1","0","0"])
         call(command.split())
 
@@ -1982,9 +2041,13 @@ if __name__ == "__main__":
 
             instancesCoordFile = os.path.join(mydir, "CellCoord.out")
             pinCellsFile = os.path.join(mydir, PIN_CELLS_F)
-            netsInstances = os.path.join(mydir, "InstancesPerNet.out")
+            if args["--netsegments"]:
+                netsWL = os.path.join(mydir, "WLnets_segments.out")
+                netsInstances = netsWL
+            else:
+                netsWL = os.path.join(mydir, "WLnets.out")
+                netsInstances = os.path.join(mydir, "InstancesPerNet.out")
             pinCoordFile = os.path.join(mydir, PIN_COORD_F)
-            netsWL = os.path.join(mydir, "WLnets.out")
             memoryBlocksFile = os.path.join(mydir, "bb.out")
             # memoryBlocksFile = mydir + "1.bb.rpt"
 
@@ -2008,8 +2071,11 @@ if __name__ == "__main__":
                 t1 = time.time()
                 logger.debug("time: %s", str(t1-t0))
             # Begin with the netWL file, as there are less nets there.
-            graph.readNetsWireLength(netsWL, 1, 0)
-            graph.readNets(netsInstances, 0, 0)
+            graph.readNetsWireLength(netsWL, 1, 0, segments=args["--netsegments"])
+            if args["--netsegments"]:
+                graph.readNets(netsInstances, 1, 0, segments=args["--netsegments"])
+            else:
+                graph.readNets(netsInstances, 0, 0, segments=args["--netsegments"])
             graph.readPins(pinCoordFile)
 
             t0 = time.time()
