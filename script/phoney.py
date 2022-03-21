@@ -8,7 +8,7 @@ Note: - It is very important at the moment that the clusters have the same ID as
 
 Usage:
     phoney.py   [-d <dir>] [-w <weight>] [--seed=seed] [--algo=algo] [--path=path] [--fix-pins]
-                [--simple-graph] [--custom-fixfile] [--netsegments]
+                [--simple-graph] [--custom-fixfile] [--netsegments] [--ub=UBfactor]
     phoney.py --help
 
 Options:
@@ -26,6 +26,7 @@ Options:
                         on the bottom die.
     --custom-fixfile    Use existing fixfile for hmetis, located in <dir> and named 'fixfile.hgr'
     --netsegments       Use alternative net segments for the graph generation. Needs a file named 'WLnets_segments.out'.
+    --ub=UBfactor       Hmetis' UBfactor. eg ub=1 means partitions allowed to a disbalance of 49/51
     -h --help           Print this help
 """
 
@@ -1085,7 +1086,7 @@ class Graph():
 ##         ##     ##  ##    ##       ##      
 ##         ##     ##  ##     ##      ##  
 
-    def GraphPartition(self, filename, FIX_PINS, fixfilepath):
+    def GraphPartition(self, filename, FIX_PINS, fixfilepath, UBfactor):
         '''
         Call the hmetis command with the given filename, or gpmetis if we are working
         with simple graphs.
@@ -1097,7 +1098,6 @@ class Graph():
         # call(["/Users/drago/bin/hmetis-1.5-osx-i686/hmetis",filename,"2","5","20","1","1","1","0","0"])
         # hmetis graphFile Nparts UBfactor Nruns Ctype Rtype Vcycle Reconst dbglvl
         Nparts = 2
-        UBfactor = 1
         # Nruns = 20
         Nruns = 10 # default for shmetis
         Ctype = 1
@@ -1952,6 +1952,7 @@ if __name__ == "__main__":
     dirs = []
     EDGE_WEIGHTS_TYPES = 0
     CUSTOM_FIXFILE = False
+    UBfactor = 1
     args = docopt(__doc__)
     print(args)
     if args["-d"]:
@@ -1982,6 +1983,8 @@ if __name__ == "__main__":
         FIX_PINS = True
     if args["--custom-fixfile"]:
         CUSTOM_FIXFILE = True
+    if args["--ub"]:
+        UBfactor=args["--ub"]
 
 
     # Random seed is preset or random, depends on weither you want the same results or not.
@@ -2119,7 +2122,7 @@ if __name__ == "__main__":
                     logger.info("=============================================================")
 
                     graph.generateMetisInput(metisInput, edgeWeightType, vertexWeightType, FIX_PINS, metisInputFixfile, pinCellsFile, CUSTOM_FIXFILE)
-                    graph.GraphPartition(metisInput, FIX_PINS, metisInputFixfile)
+                    graph.GraphPartition(metisInput, FIX_PINS, metisInputFixfile, UBfactor)
                     graph.WritePartitionDirectives(metisPartitionFile, partitionDirectivesFile, gatePerDieFile)
                     graph.extractPartitionConnectivity(os.path.join(output_dir, "connectivity_partition.txt"), edgeWeightTypesStr[edgeWeightType])
                     graph.extractPartitionNetLengthCut(os.path.join(output_dir, "cutLength_partition.txt"), edgeWeightTypesStr[edgeWeightType])
