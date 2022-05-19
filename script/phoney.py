@@ -97,7 +97,7 @@ POWER_DENSITIES = [1.0, 0.6, 0.45, 0.42, 0.39, 0.22, 0.18, 0.11, 0.10, 0.08, 0.0
 # If True, each cluster contains only one gate.
 # In that case, we assume there are no two identicals nets
 # and there is no need to merge the corresponding hyperedges
-ONE_TO_ONE = True
+ONE_TO_ONE = False
 FIX_PINS = False
 
 def printProgression(current, max):
@@ -133,6 +133,7 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
     i = startIndex
     while i < endIndex:
         net = nets[i]
+        # logger.debug("Hyperedge? Net {}".format(net.name))
 
         if len(net.clusters) > 1:
             if SIMPLE_GRAPH:
@@ -150,8 +151,11 @@ def buildHyperedges(startIndex, endIndex, nets, clusters):
                 hyperedge = Hyperedge()
                 for cluster in net.clusters:
                     hyperedge.addCluster(cluster)
+                    # logger.debug("\t Has cluster {} (id #{})".format(cluster.name, cluster.ID))
                 hyperedge.addNet(net)
                 hyperedges.append(hyperedge)
+        # else:
+            # logger.debug("\t One cluster, not integrating it inside a hyperedge.")
 
         progression = printProgression(i - startIndex, endIndex - startIndex)
         if progression != "":
@@ -229,6 +233,7 @@ class Graph():
 
                 cluster.setArea(float(clusterDataRow[5]))
                 self.clusters[cluster.name] = cluster
+                # logger.debug("Add cluster named {} with ID {}".format(cluster.name, cluster.ID))
         elif CLUSTER_INPUT_TYPE == 1:
             for i, line in enumerate(lines):
                 line = line.strip(' \n')
@@ -543,7 +548,7 @@ class Graph():
             Path to a file formated as follows:
             <Pin name> <x [float]> <y [float]>
         """
-        logger.info("Reading  pins file: {}".format(filename))
+        logger.info("Reading pins file: {}".format(filename))
         try:
             with open(filename, 'r') as f:
                 lines = f.read().splitlines()
@@ -551,15 +556,17 @@ class Graph():
             with open(os.sep.join([os.sep.join(filename.split(os.sep)[:-2]), filename.split(os.sep)[-1]]), 'r') as f:
                 lines = f.read().splitlines()
 
-        for line in lines:
-            cluster = Cluster(line.split(' ')[0], len(self.clusters), False)
-            cluster.isPin = True
-            cluster.setArea(0)
-            cluster.setPower(0)
-            self.clusters[cluster.name] = cluster
-            for net in self.nets:
-                if net.name == cluster.name:
-                    net.clusters.add(cluster)
+        with alive_bar(len(lines)) as bar:
+            for line in lines:
+                bar()
+                cluster = Cluster(line.split(' ')[0], len(self.clusters), False)
+                cluster.isPin = True
+                cluster.setArea(0)
+                cluster.setPower(0)
+                self.clusters[cluster.name] = cluster
+                for net in self.nets:
+                    if net.name == cluster.name:
+                        net.clusters.add(cluster)
 
 
 
@@ -1270,6 +1277,7 @@ class Graph():
 
         # print data
 
+        logger.debug("Writing partitions directives...")
         # This enumeration assumes that the self.clusters dictionary
         # is sorted based on the cluster ID. However, as we use the
         # cluster name as a key, it is not the case.
@@ -1277,10 +1285,13 @@ class Graph():
         # I think this the most efficient way to proceed time-wise.
         clusterDictID = dict()
         for key in self.clusters:
-            clusterDictID[self.clusters[key].ID] = self.clusters[key]
+            if not self.clusters[key].isPin:
+                # Ignore "just pin" clusters. They're dummies implemented in this script, they don't actually exist.
+                clusterDictID[self.clusters[key].ID] = self.clusters[key]
 
         for i, key in enumerate(clusterDictID):
             cluster = clusterDictID[key]
+            # logger.debug("Writing cluster id {}, name {}".format(cluster.ID, cluster.name))
             s = ""
             sInst = ""
             # Comment the dummy cluster out.
@@ -1296,13 +1307,14 @@ class Graph():
                     " " * (maxLength - len(cluster.name)) + \
                     " -die Die" + str(data[i])
 
-            cluster.setPartition(data[i])
+            cluster.setPartition(int(data[i]))
 
             if ALGO==1:
                 s+= "\n"
 
             for instance in cluster.instances.keys():
                 sInst += str(instance) + " " + str(data[i].strip()) + "\n"
+                # logger.debug("\t {}".format(instance))
 
             if write_output:
                 fOut.write(s)   
@@ -1334,7 +1346,9 @@ class Graph():
         fileStr = ""
 
         for hyperedge in self.hyperedges:
+            # logger.debug("Analyzing new hyperedge connectivity...")
             for i, cluster in enumerate(hyperedge.clusters):
+                # logger.debug("\t Cluster {} (#{}) in part {}".format(cluster.name, cluster.ID, cluster.partition))
                 if i == 0:
                     currentPart = cluster.partition
                 else:
@@ -1342,8 +1356,10 @@ class Graph():
                         currentPart == cluster.partition
                     else:
                         partCon += hyperedge.connectivity
+                        # logger.debug("\t Nets in hyperedge:")
                         for net in hyperedge.nets:
                             netCutStr += "," + net.name
+                            # logger.debug("\t\t {}".format(net.name))
                         break
 
         logger.info("------------- Number of nets cut by the partitioning: %s out of %s -------------", 
